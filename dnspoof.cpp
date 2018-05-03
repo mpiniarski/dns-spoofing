@@ -71,7 +71,7 @@ std::string createFilter(std::string mac, std::string ip) {
     return str.str();
 }
 
-std::string hetMacAddress(std::string interface_name) {
+std::string getMacAddress(std::string interface_name) {
     std::stringstream mac_address;
     unsigned char mac_array[6];
     struct ifreq interface_struct;          // interface structure -> needed for interface identification
@@ -111,7 +111,7 @@ void capture(char *interface_name, char *address) {
 
     // FILTERING:
     pcap_lookupnet(interface_name, &netp, &maskp, errbuf);   // get filter args
-    std::string macAddress = hetMacAddress(interface_name);
+    std::string macAddress = getMacAddress(interface_name);
     std::string filter = createFilter(macAddress, address);
     pcap_compile(handle, &fp, filter.c_str(), 0, netp);      // compile filter
     if (pcap_setfilter(handle, &fp) < 0) {
