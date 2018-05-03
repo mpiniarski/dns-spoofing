@@ -11,6 +11,7 @@
 #include <pcap.h>
 
 #include <arpa/inet.h>
+#include <linux/kernel.h>
 #include <linux/if_arp.h>
 #include <linux/if_ether.h>
 #include <linux/if_packet.h>
@@ -28,8 +29,8 @@
 
 libnet_t *ln;
 int sfd;
-char* errbuf;
-pcap_t* handle;
+char *errbuf;
+pcap_t *handle;
 
 char *interface_name;
 char *address;
@@ -73,7 +74,7 @@ void spoof(const char *interface_name, char *address) {
 
 std::string createFilter(std::string mac, std::string ip) {
     std::stringstream str;
-    str << "ether dst " << mac << " and dst host " << ip;
+    str << "ether dst " << mac;//<< " and dst host " << ip;
     return str.str();
 }
 
@@ -89,7 +90,7 @@ std::string getMacAddress(std::string interface_name) {
     if (ioctl(sfd, SIOCGIFFLAGS, &interface_struct) == 0) {
         if (ioctl(sfd, SIOCGIFHWADDR, &interface_struct) == 0) {
             memcpy(mac_array, interface_struct.ifr_hwaddr.sa_data, 6);
-            for (int i = 0 ; i < 6; i++) {
+            for (int i = 0; i < 6; i++) {
                 int j = mac_array[i];
                 mac_address << std::hex << j;
                 if (i != 5) mac_address << ":";
@@ -101,7 +102,7 @@ std::string getMacAddress(std::string interface_name) {
 
 void trap(u_char *user, const struct pcap_pkthdr *h, const u_char *frame) {
     int sfd_send;
-    struct sockaddr_ll sall_send;                    
+    struct sockaddr_ll sall_send;
     struct ifreq interface_struct;          // interface structure -> needed for interface identification
 
     sfd_send = socket(PF_PACKET, SOCK_RAW, htons(ETH_P_ALL));
@@ -115,40 +116,39 @@ void trap(u_char *user, const struct pcap_pkthdr *h, const u_char *frame) {
     sall_send.sll_pkttype = PACKET_OUTGOING;
     sall_send.sll_halen = ETH_ALEN;
 
-    struct ethhdr *eth_hdr = (struct ethhdr*) frame;
+    struct ethhdr *eth_hdr = (struct ethhdr *) frame;
 
-    if (eth_hdr->h_proto == ETH_P_IP){
-        struct iphdr *ip_hdr = (struct iphdr*) (frame + sizeof(struct ethhdr));
-        if (ip_hdr->protocol == IPPROTO_UDP){ 
-            struct udphdr  *udp_hdr = (struct udphdr *) (frame + sizeof(struct iphdr));
-            if (udp_hdr->dest == 0x0035){ // Port 53 (DNS) TODO
+    if (ntohs(eth_hdr->h_proto) == ETH_P_IP) {
+        struct iphdr *ip_hdr = (struct iphdr *) (frame + sizeof(struct ethhdr));
+        if (ip_hdr->protocol == 0x11) {
+            struct udphdr *udp_hdr = (struct udphdr *) (ip_hdr + sizeof(struct iphdr));
+            uint16_t port = ntohs(udp_hdr->dest);
+            if (port == 53) { // Port 53 (DNS) TODOresult = {__be16} 0
+                printf("DUPA\n");
                 // TODO change query from e.g. facebook.com to wp.pl
             }
         }
     }
 
     // PRINT
-    printf("[%dB] %02x:%02x:%02x:%02x:%02x:%02x -> ", (int) h->caplen,
-            eth_hdr->h_source[0], eth_hdr->h_source[1], eth_hdr->h_source[2],
-            eth_hdr->h_source[3], eth_hdr->h_source[4], eth_hdr->h_source[5]);
+    printf("[%dB] %02x:%02x:%02x:%02x:%02x:%02x -> ", (int) (h->caplen),
+           eth_hdr->h_source[0], eth_hdr->h_source[1], eth_hdr->h_source[2],
+           eth_hdr->h_source[3], eth_hdr->h_source[4], eth_hdr->h_source[5]);
     printf("%02x:%02x:%02x:%02x:%02x:%02x | ",
-            eth_hdr->h_dest[0], eth_hdr->h_dest[1], eth_hdr->h_dest[2],
-            eth_hdr->h_dest[3], eth_hdr->h_dest[4], eth_hdr->h_dest[5]);
+           eth_hdr->h_dest[0], eth_hdr->h_dest[1], eth_hdr->h_dest[2],
+           eth_hdr->h_dest[3], eth_hdr->h_dest[4], eth_hdr->h_dest[5]);
     printf("\n\n");
-
-    sfd_send = socket(PF_PACKET, SOCK_RAW, htons(ETH_P_ALL)); // TODO
 
     // SEND FRAME
     // Change destination address to default gateway MAC
     sscanf(deafault_gateway_mac, "%hhx:%hhx:%hhx:%hhx:%hhx:%hhx",
-            &sall_send.sll_addr[0], &sall_send.sll_addr[1], &sall_send.sll_addr[2],
-            &sall_send.sll_addr[3], &sall_send.sll_addr[4], &sall_send.sll_addr[5]);
+           &sall_send.sll_addr[0], &sall_send.sll_addr[1], &sall_send.sll_addr[2],
+           &sall_send.sll_addr[3], &sall_send.sll_addr[4], &sall_send.sll_addr[5]);
     memcpy(eth_hdr->h_dest, &sall_send.sll_addr, ETH_ALEN);
     // Change source address to this computer MAC
     ioctl(sfd_send, SIOCGIFHWADDR, &interface_struct);
     memcpy(eth_hdr->h_source, &interface_struct.ifr_hwaddr.sa_data, ETH_ALEN);
-
-    if (sendto(sfd_send, frame, (int)h->caplen, 0,(struct sockaddr*) &sall_send, sizeof(struct sockaddr_ll)) < 0) {
+    if (sendto(sfd_send, frame, (int) (h->caplen), 0, (struct sockaddr *) &sall_send, sizeof(struct sockaddr_ll)) < 0) {
         printf("Error while sending: %s\n", strerror(errno));
     } else {
         printf("Message sent!\n");
@@ -157,10 +157,10 @@ void trap(u_char *user, const struct pcap_pkthdr *h, const u_char *frame) {
     close(sfd_send);
 }
 
-void capture(char *interface_name, char *address, char* deafault_gateway_mac) {
+void capture(char *interface_name, char *address, char *deafault_gateway_mac) {
     bpf_u_int32 netp, maskp;
     struct bpf_program fp;
-    errbuf= static_cast<char *>(malloc(PCAP_ERRBUF_SIZE));          // alloc memory for error buffer
+    errbuf = static_cast<char *>(malloc(PCAP_ERRBUF_SIZE));          // alloc memory for error buffer
     handle = pcap_create(interface_name, errbuf);                   // alloc for handler
     pcap_set_promisc(handle, 1); // TODO
     pcap_set_snaplen(handle, 65535);                                // frame length
