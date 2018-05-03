@@ -9,9 +9,6 @@
 #include <libnet.h>
 
 #include <pcap.h>
-#include <signal.h>
-#include <stdlib.h>
-#include <string.h>
 #include <arpa/inet.h>
 #include <linux/if_arp.h>
 #include <linux/if_ether.h>
@@ -27,21 +24,8 @@
 #include <sstream>
 #include <csignal>
 
-
-
-// TODO
-// 1. Cleanup
-//   - C -> C++
-//   - spoof
-//   - argumenty z linii poleceń
-// 2. Zamknięcie na signal
-// 3. capture - zasymulować ip forward
-//   - filtr na pcap
-//   - przesyłanie dalej
-
 libnet_t *ln;
 int sfd;
-
 char* errbuf;
 pcap_t* handle;
 
@@ -81,20 +65,39 @@ void spoof(const char *interface_name, char *address) {
 
 }
 
-std::string createFilter(std::string gatewayIp) {
-    // ether dst ADDRESS_MAC and dst host IP
+std::string createFilter(std::string mac, std::string ip) {
     std::stringstream str;
-    std::string thisHostMacAddress = "50:b7:c3:cd:17:2e";  // TODO hardcoded
-    str << "ether dst " << thisHostMacAddress << " and dst host " << gatewayIp;
+    str << "ether dst " << mac << " and dst host " << ip;
     return str.str();
+}
+
+std::string hetMacAddress(std::string interface_name) {
+    std::stringstream mac_address;
+    unsigned char mac_array[6];
+    struct ifreq interface_struct;          // interface structure -> needed for interface identification
+    sfd = socket(PF_PACKET, SOCK_RAW, htons(ETH_P_ALL));        // get socket's descriptor no
+    strncpy(interface_struct.ifr_name, interface_name.c_str(), IFNAMSIZ); // read interface name and save it to interface_struct
+    if (sfd < 0) {
+        std::cerr << "Problem in socket creationn";
+    };
+    if (ioctl(sfd, SIOCGIFFLAGS, &interface_struct) == 0) {
+        if (ioctl(sfd, SIOCGIFHWADDR, &interface_struct) == 0) {
+            memcpy(mac_array, interface_struct.ifr_hwaddr.sa_data, 6);
+            for (int i = 0 ; i < 6; i++) {
+                int j = mac_array[i];
+                mac_address << std::hex << j;
+                if (i != 5) mac_address << ":";
+            }
+        }
+    }
+    return mac_address.str();
 }
 
 void trap(u_char *user, const struct pcap_pkthdr *h, const u_char *bytes) {
     printf("[%dB of %dB]\n", h->caplen, h->len);
     struct ethhdr* etherHeader = (struct ethhdr*) bytes;
+    // TODO
 
-    // len - bytes count copied from frame
-    // caplen - bytes count saved in buffer
 }
 
 void capture(char *interface_name, char *address) {
@@ -108,22 +111,20 @@ void capture(char *interface_name, char *address) {
 
     // FILTERING:
     pcap_lookupnet(interface_name, &netp, &maskp, errbuf);   // get filter args
-    std::string filter= createFilter(address);
+    std::string macAddress = hetMacAddress(interface_name);
+    std::string filter = createFilter(macAddress, address);
     pcap_compile(handle, &fp, filter.c_str(), 0, netp);      // compile filter
     if (pcap_setfilter(handle, &fp) < 0) {
         pcap_perror(handle, "pcap_setfilter()");
         exit(EXIT_FAILURE);
     }
-
     pcap_loop(handle, -1, trap, NULL);        // run trap
 }
 
 void stop(int signal) {
-    // TODO clean memory
     libnet_destroy(ln);
     pcap_close(handle);
     free(errbuf);
-    // close(sfd);
     exit(EXIT_SUCCESS);
 }
 
