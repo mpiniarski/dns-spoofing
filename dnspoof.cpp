@@ -35,7 +35,7 @@ pcap_t *handle;
 char *interface_name;
 char *address;
 char *deafault_gateway_mac;
-int counter  = 0;
+int counter = 0;
 
 void spoof(const char *interface_name, char *address) {
     // TODO sprawdzić czy to libnet_init można wyciągnąć przed while itp.
@@ -102,17 +102,17 @@ std::string getIpAddress(std::string interface_name) {
     /* I want to get an IPv4 IP address */
     interface_struct.ifr_addr.sa_family = AF_INET;
     /* I want IP address attached to "eth0" */
-    strncpy(interface_struct.ifr_name, interface_name.c_str(), IFNAMSIZ-1);
+    strncpy(interface_struct.ifr_name, interface_name.c_str(), IFNAMSIZ - 1);
     int ret = ioctl(fd, SIOCGIFADDR, &interface_struct);
     if (ret != 0) {
         std::cerr << "Error occurs when searching for an ip!\n";
     }
-    std::string ip = inet_ntoa(((struct sockaddr_in *)&interface_struct.ifr_addr)->sin_addr);
+    std::string ip = inet_ntoa(((struct sockaddr_in *) &interface_struct.ifr_addr)->sin_addr);
     close(fd);
     return ip;
 }
 
-std::string createFilter(char* interface_name, std::string gatewayIp) {
+std::string createFilter(char *interface_name, std::string gatewayIp) {
     std::string myMacAddress = getMacAddress(interface_name);
     std::string myIpAddress = getIpAddress(interface_name);
 
@@ -145,11 +145,11 @@ void trap(u_char *user, const struct pcap_pkthdr *h, const u_char *frame) {
     if (ntohs(eth_hdr->h_proto) == ETH_P_IP) {
         struct iphdr *ip_hdr = (struct iphdr *) (frame + sizeof(struct ethhdr));
         if (ip_hdr->protocol == 0x11) {
-            struct udphdr *udp_hdr = (struct udphdr *) (ip_hdr + sizeof(struct iphdr));
+            struct udphdr *udp_hdr = (struct udphdr *) (frame + sizeof(struct ethhdr) + sizeof(struct iphdr));
             uint16_t port = ntohs(udp_hdr->dest);
             if (port == 53) { // Port 53 (DNS) TODOresult = {__be16} 0
                 printf("DUPA\n");
-                // TODO change query from e.g. facebook.com to wp.pl
+//                 TODO change query from e.g. facebook.com to wp.pl
             }
         }
     }
