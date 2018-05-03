@@ -131,7 +131,6 @@ void trap(u_char *user, const struct pcap_pkthdr *h, const u_char *frame) {
     sfd_send = socket(PF_PACKET, SOCK_RAW, htons(ETH_P_ALL));
     strncpy(interface_struct.ifr_name, interface_name, IFNAMSIZ);
     ioctl(sfd_send, SIOCGIFINDEX, &interface_struct);
-    close(sfd_send);
     memset(&sall_send, 0, sizeof(struct sockaddr_ll));
     sall_send.sll_family = AF_PACKET;
     sall_send.sll_protocol = htons(ETH_P_ALL);
