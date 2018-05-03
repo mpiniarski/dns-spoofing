@@ -15,6 +15,9 @@
 #include <sys/ioctl.h>
 #include <csignal>
 
+#include <linux/ip.h>
+#include <linux/udp.h>
+
 #include <thread>
 #include <chrono>
 #include <iostream>
@@ -110,6 +113,19 @@ void *capture(char *interface_name, char* deafault_gateway_mac) {
         ssize_t len;
         len = recvfrom(sfd, frame, ETH_FRAME_LEN, 0, nullptr, nullptr);
 
+
+
+        struct ethhdr *eth_hdr = (struct ethhdr*) frame;
+        if (eth_hdr->h_proto == ETH_P_IP){
+            struct iphdr *ip_hdr = (struct iphdr*) (frame + sizeof(struct ethhdr));
+            if (ip_hdr->protocol == 0x11){ // UDP
+                struct udphdr  *udp_hdr = (struct udphdr *) (frame + sizeof(struct iphdr));
+                if (udp_hdr->dest == 0x0035){ // Port 53 (DNS)
+                    // TODO change query from e.g. facebook.com to wp.pl
+                }
+            }
+        }
+
         // TODO wziąć zapytania na bramę i wysłać je tam (zmienić adres MAC - wprowadzany z linii poleceń)
         // DESTINATION IP           : DEFAULT GATEWAY
         // DESTINATION MAC ADDRESS  : MY COMPUTER'S ID
@@ -121,9 +137,8 @@ void *capture(char *interface_name, char* deafault_gateway_mac) {
             printf("%02x:%02x:%02x:%02x:%02x:%02x | ",
                    fhead->h_dest[0], fhead->h_dest[1], fhead->h_dest[2],
                    fhead->h_dest[3], fhead->h_dest[4], fhead->h_dest[5]);
-
-
             printf("\n\n");
+
 
             // SEND FRAME
             // Change destination address to default gateway MAC
@@ -132,7 +147,7 @@ void *capture(char *interface_name, char* deafault_gateway_mac) {
                    &sall_send.sll_addr[3], &sall_send.sll_addr[4], &sall_send.sll_addr[5]);
             sfd_send = socket(PF_PACKET, SOCK_RAW, htons(ETH_P_ALL));
             memcpy(fhead->h_dest, &sall_send.sll_addr, ETH_ALEN);
-
+            // Change source address to this computer MAC
             ioctl(sfd_send, SIOCGIFHWADDR, &interface_struct);
             memcpy(fhead->h_source, &interface_struct.ifr_hwaddr.sa_data, ETH_ALEN);
 
