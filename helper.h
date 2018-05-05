@@ -26,6 +26,7 @@ libnet_t *ln;
 char *errbuf;
 char* address;
 pcap_t *handle;
+std::string spoofedPage;
 
 char *interface_name;
 char *deafault_gateway_mac;

