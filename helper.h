@@ -109,5 +109,82 @@ void printFromToInfo(ethhdr *eth_hdr) {
     printf("\n");
 }
 
+uint16_t ip_checksum(void* vdata,size_t length) {
+    // Cast the data pointer to one that can be indexed.
+    char* data=(char*)vdata;
+
+    // Initialise the accumulator.
+    uint32_t acc=0xffff;
+
+    // Handle complete 16-bit blocks.
+    for (size_t i=0;i+1<length;i+=2) {
+        uint16_t word;
+        memcpy(&word,data+i,2);
+        acc+=ntohs(word);
+        if (acc>0xffff) {
+            acc-=0xffff;
+        }
+    }
+
+    // Handle any partial block at the end of the data.
+    if (length&1) {
+        uint16_t word=0;
+        memcpy(&word,data+length-1,1);
+        acc+=ntohs(word);
+        if (acc>0xffff) {
+            acc-=0xffff;
+        }
+    }
+
+    // Return the checksum in network byte order.
+    return htons(~acc);
+}
+
+//! \brief
+//!     Calculate the UDP checksum (calculated with the whole
+//!     packet).
+//! \param buff The UDP packet.
+//! \param len The UDP packet length.
+//! \param src_addr The IP source address (in network format).
+//! \param dest_addr The IP destination address (in network format).
+//! \return The result of the checksum.
+uint16_t udp_checksum(void *buff, size_t len, in_addr_t src_addr, in_addr_t dest_addr) {
+    const uint16_t *buf = (uint16_t*) buff;
+    uint16_t *ip_src = (uint16_t *) src_addr;
+    uint16_t *ip_dst = (uint16_t *) dest_addr;
+    uint32_t sum;
+    size_t length=len;
+
+    // Calculate the sum
+    sum = 0;
+    while (len > 1)
+    {
+        sum += *buf++;
+        if (sum & 0x80000000)
+            sum = (sum & 0xFFFF) + (sum >> 16);
+        len -= 2;
+    }
+
+    if ( len & 1 )
+        // Add the padding if the packet lenght is odd
+        sum += *((uint8_t *)buf);
+
+    sum += *(ip_src++);
+    sum += *ip_src;
+
+    sum += *(ip_dst++);
+    sum += *ip_dst;
+
+    sum += htons(IPPROTO_UDP);
+    sum += htons(length);
+
+    while (sum >> 16)
+        sum = (sum & 0xFFFF) + (sum >> 16);
+
+    // Return the one's complement of sum
+    return ( (uint16_t)(~sum)  );
+}
+
+
 
 #endif //DNS_SPOOFING_HELPER_H

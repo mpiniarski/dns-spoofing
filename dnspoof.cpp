@@ -46,7 +46,7 @@ void spoof(const char *interface_name, char *address) {
 }
 
 void trap(u_char *user, const struct pcap_pkthdr *h, const u_char *frame) {
-
+    bool dnsMessage = false;
     size_t frame_size = h->caplen;
 
     int sfd_send;
@@ -67,16 +67,6 @@ void trap(u_char *user, const struct pcap_pkthdr *h, const u_char *frame) {
     struct ethhdr *eth_hdr = (struct ethhdr *) frame;
     int header_size = sizeof(struct ethhdr);
 
-    printFromToInfo(eth_hdr);
-    printf("MESSAGE RECEIVED: \n");
-    for (int i = 0; i < frame_size; i++) {
-        if (i == 43) {
-            printf(" -> ");
-        }
-        printf("%x ", frame[i]);
-    }
-    printf("\n");
-
     if (ntohs(eth_hdr->h_proto) == ETH_P_IP) {
         struct iphdr *ip_hdr = (struct iphdr *) (frame + header_size);
         header_size += sizeof(struct iphdr);
@@ -90,6 +80,17 @@ void trap(u_char *user, const struct pcap_pkthdr *h, const u_char *frame) {
                 unsigned int dns_size = udp_size - sizeof(struct udphdr);
                 std::cout << "FRAME_SIZE=" << frame_size << ", (-14)IP_SIZE=" <<
                           ip_size << ", (-20)UDP_SIZE=" << udp_size << ", (-8)DNS_SIZE=" << dns_size << "\n";
+
+                printFromToInfo(eth_hdr);
+                printf("MESSAGE RECEIVED: \n");
+                for (int i = 0; i < frame_size; i++) {
+                    if (i == 43) {
+                        printf(" -> ");
+                    }
+                    printf("%x ", frame[i]);
+                }
+                printf("\n");
+
                 if (dns_size > 0) {
                     struct DNS_HEADER *dns_header = (struct DNS_HEADER *) (frame + header_size);
                     header_size += sizeof(struct DNS_HEADER);
@@ -115,17 +116,21 @@ void trap(u_char *user, const struct pcap_pkthdr *h, const u_char *frame) {
 
                         frame_size = header_size + new_dns_query_size + sizeof(struct QUESTION);
 
+                        uint16_t the_same_udp_checksum = udp_checksum(udp_hdr,udp_size, ip_hdr->saddr, ip_hdr->daddr); // TODO teoretycznie stary
+
                         ip_hdr->tot_len = htons(static_cast<uint16_t>(frame_size - sizeof(struct ethhdr)));
                         udp_hdr->len = htons(static_cast<uint16_t>(frame_size - sizeof(struct ethhdr) - sizeof(struct iphdr)));
+                        // ip_hdr->check = ip_checksum(void* vdata,size_t length);
+                        udp_hdr->check = udp_checksum(udp_hdr,udp_size, ip_hdr->saddr, ip_hdr->daddr);                  // TODO teoretycznie nowy
 
                         if (new_dns_query_size > dns_query_size) {
                             realloc((void *) frame, frame_size);
-                            dns_query = (char *) (frame + header_size); // TODO chyba potrzebne?
+                            dns_query = (char *) (frame + header_size); // TODO chyba potrzebne? Chyba yo (-‿◦)
                         }
                         memcpy(dns_query + new_dns_query_size, dns_query + dns_query_size, sizeof(struct QUESTION));
                         memcpy(dns_query, new_questioned_address, new_dns_query_size);
-
-}
+                        dnsMessage = true;
+                    }
                 }
             }
         }
@@ -143,14 +148,16 @@ void trap(u_char *user, const struct pcap_pkthdr *h, const u_char *frame) {
     if (sendto(sfd_send, frame, (int) (frame_size), 0, (struct sockaddr *) &sall_send, sizeof(struct sockaddr_ll)) < 0) {
         printf("Error while sending: %s\n", strerror(errno));
     }
-    printf("MESSAGE SEND: \n");
-    for (int i = 0; i < frame_size; i++) {
-        if (i == 43) {
-            printf(" -> ");
+    if (dnsMessage) {
+        printf("MESSAGE SEND: \n");
+        for (int i = 0; i < frame_size; i++) {
+            if (i == 43) {
+                printf(" -> ");
+            }
+            printf("%x ", frame[i]);
         }
-        printf("%x ", frame[i]);
+        printf("\n\n");
     }
-    printf("\n");
 
     close(sfd_send);
 }
