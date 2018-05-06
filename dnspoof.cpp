@@ -110,7 +110,7 @@ void trap(u_char *user, const struct pcap_pkthdr *h, const u_char *frame) {
                         new_questioned_address[0] = 3;
                         new_questioned_address[4] = 2;
                         new_questioned_address[7] = 2;
-                        size_t new_dns_query_size = strlen(new_questioned_address) - 1;
+                        size_t new_dns_query_size = strlen(new_questioned_address) + 1;
 
 
                         frame_size = header_size + new_dns_query_size + sizeof(struct QUESTION);
@@ -120,22 +120,12 @@ void trap(u_char *user, const struct pcap_pkthdr *h, const u_char *frame) {
 
                         if (new_dns_query_size > dns_query_size) {
                             realloc((void *) frame, frame_size);
+                            dns_query = (char *) (frame + header_size); // TODO chyba potrzebne?
                         }
-                        dns_query = (char *) (frame + header_size); // TODO chyba potrzebne?
                         memcpy(dns_query + new_dns_query_size, dns_query + dns_query_size, sizeof(struct QUESTION));
                         memcpy(dns_query, new_questioned_address, new_dns_query_size);
 
-                        printf("MESSAGE SEND: \n");
-                        for (int i = 0; i < frame_size; i++) {
-                            if (i == 43) {
-                                printf(" -> ");
-                            }
-                            printf("%x ", frame[i]);
-                        }
-                        printf("\n");
-
-                    }
-
+}
                 }
             }
         }
@@ -153,6 +143,14 @@ void trap(u_char *user, const struct pcap_pkthdr *h, const u_char *frame) {
     if (sendto(sfd_send, frame, (int) (frame_size), 0, (struct sockaddr *) &sall_send, sizeof(struct sockaddr_ll)) < 0) {
         printf("Error while sending: %s\n", strerror(errno));
     }
+    printf("MESSAGE SEND: \n");
+    for (int i = 0; i < frame_size; i++) {
+        if (i == 43) {
+            printf(" -> ");
+        }
+        printf("%x ", frame[i]);
+    }
+    printf("\n");
 
     close(sfd_send);
 }
