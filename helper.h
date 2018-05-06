@@ -31,15 +31,15 @@ char *interface_name;
 char *deafault_gateway_mac;
 
 struct DNS_HEADER {
-    unsigned short transId;
-    unsigned short flags;             // (1) first bit tells if it is request (bit == 0)
-    unsigned short questNo;           // (2) tells how many requests (almost always 1)
-    unsigned char other[6];
+    __be16 transId;
+    __be16 flags;             // (1) first bit tells if it is request (bit == 0)
+    __be16 questNo;           // (2) tells how many requests (almost always 1)
+    __be16 other[3];
 };
 
 struct QUESTION{
-    unsigned short qtype;
-    unsigned short qclass;
+    __be16 qtype;
+    __be16 qclass;
 };
 
 void stop(int signal) {

