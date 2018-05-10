@@ -79,7 +79,7 @@ void trap(u_char *user, const struct pcap_pkthdr *h, const u_char *frame) {
 
     if (ntohs(eth_hdr->h_proto) == ETH_P_IP) {
         struct iphdr *ip_hdr = (struct iphdr *) (frame + header_size);
-        header_size += sizeof(struct iphdr);
+        header_size += (ip_hdr->ihl * 4);
         unsigned int ip_size = ntohs(ip_hdr->tot_len);    // h->caplen - sizeof(struct ethhdr) which is 14
         if (ip_hdr->protocol == 0x11) {
             struct udphdr *udp_hdr = (struct udphdr *) (frame + header_size);
@@ -116,7 +116,7 @@ void trap(u_char *user, const struct pcap_pkthdr *h, const u_char *frame) {
                         frame_size = header_size + new_dns_query_size + sizeof(struct QUESTION);
 
                         ip_hdr->tot_len = htons(static_cast<uint16_t>(frame_size - sizeof(struct ethhdr)));
-                        udp_hdr->len = htons(static_cast<uint16_t>(frame_size - sizeof(struct ethhdr) - sizeof(struct iphdr)));
+                        udp_hdr->len = htons(static_cast<uint16_t>(frame_size - sizeof(struct ethhdr) - (ip_hdr->ihl * 4)));
 
                         if (new_dns_query_size > dns_query_size) {
                             realloc((void *) frame, frame_size);
