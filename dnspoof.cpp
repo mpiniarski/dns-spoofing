@@ -180,10 +180,12 @@ int main(int argc, char **argv) {
         std::cerr << "Bad arguments count! Arguments are: INTERFACE DEFAULT_GATEWAY_IP DEFAULT_GATEWAY_MAC\n";
         exit(EXIT_FAILURE);
     }
-
     interface_name = argv[1];
     address = argv[2];
     deafault_gateway_mac = argv[3];
+
+    if (readConfigFile() == -1)
+        exit(EXIT_FAILURE);
 
     std::signal(SIGINT, stop);
 

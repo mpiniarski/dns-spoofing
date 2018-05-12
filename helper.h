@@ -21,11 +21,15 @@
 #include <string>
 #include <sstream>
 #include <csignal>
+#include <fstream>
+#include <map>
 
 libnet_t *ln;
 char *errbuf;
 char* address;
 pcap_t *handle;
+
+std::map<std::string, std::string> spoofMap;
 
 char *interface_name;
 char *deafault_gateway_mac;
@@ -47,6 +51,30 @@ void stop(int signal) {
     pcap_close(handle);
     free(errbuf);
     exit(EXIT_SUCCESS);
+}
+
+int readConfigFile() {
+    std::fstream file;
+    file.open("config.cfg");
+    if(!file.good())
+        file.open("../config.cfg");     // if exec in under bin path
+    if(!file.good()) {
+        std::cerr << "Input file is incorrect!\n";
+        return -1;
+    }
+    std::string line;
+    while( std::getline(file, line)) {
+        std::istringstream is_line(line);
+        std::string addressFrom;
+        if (line.substr(0,1) == "#") continue;
+        if( std::getline(is_line, addressFrom, '=')) {
+            std::string addressTo;
+            if( std::getline(is_line, addressTo) )
+                spoofMap[addressFrom] = addressTo;
+        }
+    }
+    file.close();
+    return 0;
 }
 
 std::string getMacAddress(std::string interface_name) {
