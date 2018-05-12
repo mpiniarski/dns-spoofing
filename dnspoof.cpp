@@ -175,13 +175,23 @@ void trap(u_char *user, const struct pcap_pkthdr *h, const u_char *frame) {
                         /* auto calculate the checksum */
                         libnet_toggle_checksum(ln, t, LIBNET_ON);
 
-                        t = libnet_autobuild_ipv4( // autobuild is easier then build
+                        t = libnet_build_ipv4(
                                 LIBNET_IPV4_H + LIBNET_UDP_H + LIBNET_UDP_DNSV4_H + datalen, /* length */
+                                0,                                                           /* TOS */
+                                htons(0xbaff),                                         /* IP ID */
+                                0,                                                           /* IP Frag */
+                                64,                                                          /* TTL */
                                 IPPROTO_UDP,                                                 /* protocol */
+                                0,                                                           /* checksum */
+                                ntohl(ip_hdr->daddr),                                        /* source IP */
                                 ntohl(ip_hdr->saddr),                                        /* destination IP */
-                                ln);                                                         /* libnet handle */
+                                NULL,                                                        /* payload */
+                                0,                                                           /* payload size */
+                                ln,                                                          /* libnet handle */
+                                0);
 
-                        /* auto calculate the checksum */ libnet_toggle_checksum(ln, t, LIBNET_ON);
+                        /* auto calculate the checksum */
+                        libnet_toggle_checksum(ln, t, LIBNET_ON);
                         libnet_write(ln);
 
                         close(sfd_send);// TODO refactor, don't do this here!
