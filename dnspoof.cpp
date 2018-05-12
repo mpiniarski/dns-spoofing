@@ -178,13 +178,13 @@ void trap(u_char *user, const struct pcap_pkthdr *h, const u_char *frame) {
                         t = libnet_build_ipv4(
                                 LIBNET_IPV4_H + LIBNET_UDP_H + LIBNET_UDP_DNSV4_H + datalen, /* length */
                                 0,                                                           /* TOS */
-                                htons(0xbaff),                                         /* IP ID */
+                                0xf505,                                                      /* IP ID */
                                 0,                                                           /* IP Frag */
                                 64,                                                          /* TTL */
                                 IPPROTO_UDP,                                                 /* protocol */
                                 0,                                                           /* checksum */
-                                ntohl(ip_hdr->daddr),                                        /* source IP */
-                                ntohl(ip_hdr->saddr),                                        /* destination IP */
+                                ip_hdr->daddr,                                               /* source IP */
+                                ip_hdr->saddr,                                               /* destination IP */
                                 NULL,                                                        /* payload */
                                 0,                                                           /* payload size */
                                 ln,                                                          /* libnet handle */
