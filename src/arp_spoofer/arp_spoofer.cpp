@@ -16,7 +16,7 @@ void arp_spoof(char *interface_name, char *default_gateway_ip) {
     while (true) {
         libnet_write(ln);
         std::chrono::seconds sec = std::chrono::seconds(1);
-        std::this_thread::sleep_for(sec); // TODO czy to musi być this_thread? Bo do tego trzeba spcejalnie include'ować <thread>
+        std::this_thread::sleep_for(sec); // TODO czy to musi być this_thread? raczej musi
     }
 }
 

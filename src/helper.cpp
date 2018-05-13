@@ -63,14 +63,3 @@ int readConfigFile() {
 }
 
 
-void printFromToInfo(ethhdr *eth_hdr) { // TODO czy to porzebne?
-    printf("%02x:%02x:%02x:%02x:%02x:%02x -> ",
-           eth_hdr->h_source[0], eth_hdr->h_source[1], eth_hdr->h_source[2],
-           eth_hdr->h_source[3], eth_hdr->h_source[4], eth_hdr->h_source[5]);
-    printf("%02x:%02x:%02x:%02x:%02x:%02x ",
-           eth_hdr->h_dest[0], eth_hdr->h_dest[1], eth_hdr->h_dest[2],
-           eth_hdr->h_dest[3], eth_hdr->h_dest[4], eth_hdr->h_dest[5]);
-    printf("\n");
-}
-
-

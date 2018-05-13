@@ -7,7 +7,7 @@
 #include <linux/if_ether.h>
 
 
-std::string createFilter(char *interface_name) {
+std::string createFilter(std::string interface_name) {
     std::string myMacAddress = getMacAddress(interface_name);
     std::string myIpAddress = getIpAddress(interface_name);
 

@@ -21,7 +21,7 @@ void libnet_build_dns_spoof(__be32 source_ip,
 
 #define DNS_ANSWER_SIZE 16
 
-struct dns_answer { // TODO jakiś inny sposób na paddingi niż stosowanie tylko __be16?
+struct dns_answer {
     dns_answer(unsigned char* address) :
         name(htons(0xc00c)),
         type(htons(1)),
@@ -29,16 +29,14 @@ struct dns_answer { // TODO jakiś inny sposób na paddingi niż stosowanie tylk
         ttl1(htons(0x0)),
         ttl2(htons(0x4e)),
         data_length(htons(4)) {
-        //TODO IMPORTANT zamiast na pałę wpisywać :
-
             std::stringstream stream, stream2;
             stream << "0x" << std::setfill ('0') << std::setw(sizeof(char)*2) <<
                    std::hex << (int)address[0] << (int)address[1];
             stream2 << "0x" << std::setfill ('0') << std::setw(sizeof(char)*2) <<
                std::hex << (int)address[2] << (int)address[3];
 
-            int number1 = (int)strtol(stream.str().c_str(), NULL, 0);
-            int number2 = (int)strtol(stream2.str().c_str(), NULL, 0);
+            int number1 = (int)strtol(stream.str().c_str(), nullptr, 0);
+            int number2 = (int)strtol(stream2.str().c_str(), nullptr, 0);
             address1 = htons(number1);
             address2 = htons(number2);
         }

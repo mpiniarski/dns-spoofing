@@ -11,5 +11,4 @@ static std::map<std::string, std::string> spoofMap;
 
 void stop(int signal);
 int readConfigFile();
-void printFromToInfo(ethhdr *eth_hdr);
 std::shared_ptr<std::map<std::string, std::string>> getSpoofMap();

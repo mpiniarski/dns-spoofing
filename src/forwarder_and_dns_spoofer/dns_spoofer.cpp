@@ -41,7 +41,6 @@ bool handle_dns_spoofing(const u_char *frame, char *interface_name) {
     if (eth_hdr->h_proto == htons(ETH_P_IP)) {
         auto *ip_hdr = (struct iphdr *) (frame + header_size);
         header_size += (ip_hdr->ihl * 4);
-        unsigned int ip_size = ntohs(ip_hdr->tot_len);    // h->caplen - sizeof(struct ethhdr) which is 14
         if (ip_hdr->protocol == PROTOCOL_UDP) {
             struct udphdr *udp_hdr = (struct udphdr *) (frame + header_size);
             header_size += sizeof(struct udphdr);
