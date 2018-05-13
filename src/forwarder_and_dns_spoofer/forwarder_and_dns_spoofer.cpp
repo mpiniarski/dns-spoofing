@@ -1,6 +1,7 @@
+#include "forwarder_and_dns_spoofer.h"
+
 #include <pcap.h>
 
-#include "forwarder_and_dns_spoofer.h"
 #include "../helper.h"
 #include "filter.h"
 #include "forwarder.h"

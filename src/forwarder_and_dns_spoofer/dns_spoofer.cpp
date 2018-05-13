@@ -1,3 +1,5 @@
+#include "dns_spoofer.h"
+
 #include <linux/if_ether.h>
 #include <linux/if_arp.h>
 #include <linux/if_ether.h>
@@ -8,7 +10,6 @@
 #include <map>
 #include <iostream>
 
-#include "dns_spoofer.h"
 #include "../helper.h"
 
 std::string getSpoofedAddressForThisSite(char *questionedSite) {
