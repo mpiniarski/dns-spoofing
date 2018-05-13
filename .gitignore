@@ -33,3 +33,6 @@
 
 dnspoof
 .idea/
+bin/
+cmake-build-debug/
+
