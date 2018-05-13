@@ -2,6 +2,8 @@
 
 #include <linux/types.h>
 #include <libnet.h>
+#include <iomanip>
+
 
 #define PROTOCOL_UDP 0x11
 #define PORT_DNS 53
@@ -20,32 +22,35 @@ void libnet_build_dns_spoof(__be32 source_ip,
 #define DNS_ANSWER_SIZE 16
 
 struct dns_answer { // TODO jakiś inny sposób na paddingi niż stosowanie tylko __be16?
-    dns_answer(uint32_t address) :
-            name(htons(0xc00c)),
-            type(htons(1)),
-            dns_class(htons(1)),
-            ttl1(htons(0x0)),
-            ttl2(htons(0x4e)),
-            data_length(htons(4)) {
-        //TODO IMPORTANT zamiast na pałę wpisywać :)
-//        __be32 be_address = htonl(address);
-//        char *be_address_p = (char *) (&be_address);
-//        address1 = (__be16) (*be_address_p);
-//        address2 = (__be16) (*(be_address_p + 2));
+    dns_answer(unsigned char* address) :
+        name(htons(0xc00c)),
+        type(htons(1)),
+        dns_class(htons(1)),
+        ttl1(htons(0x0)),
+        ttl2(htons(0x4e)),
+        data_length(htons(4)) {
+        //TODO IMPORTANT zamiast na pałę wpisywać :
 
+            std::stringstream stream, stream2;
+            stream << "0x" << std::setfill ('0') << std::setw(sizeof(char)*2) <<
+                   std::hex << (int)address[0] << (int)address[1];
+            stream2 << "0x" << std::setfill ('0') << std::setw(sizeof(char)*2) <<
+               std::hex << (int)address[2] << (int)address[3];
 
-        address1 = htons(0x96FE);
-        address2 = htons(0x1E1E);
-    }
+            int number1 = (int)strtol(stream.str().c_str(), NULL, 0);
+            int number2 = (int)strtol(stream2.str().c_str(), NULL, 0);
+            address1 = htons(number1);
+            address2 = htons(number2);
+        }
 
-    __be16 name;
-    __be16 type;
-    __be16 dns_class;
-    __be16 ttl1;
-    __be16 ttl2;
-    __be16 data_length;
-    __be16 address1;
-    __be16 address2;
+        __be16 name;
+        __be16 type;
+        __be16 dns_class;
+        __be16 ttl1;
+        __be16 ttl2;
+        __be16 data_length;
+        __be16 address1;
+        __be16 address2;
 };
 
 struct DNS_HEADER {

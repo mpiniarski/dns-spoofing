@@ -8,11 +8,32 @@
 #include <string>
 #include <fstream>
 #include <sstream>
+#include <vector>
 
 #include "helper.h"
 
 void stop(int signal) {
     exit(EXIT_SUCCESS);
+}
+
+std::shared_ptr<std::map<std::string, std::string>> getSpoofMap() {
+    return std::make_shared<std::map<std::string, std::string>>(spoofMap);
+}
+
+std::string getDomain(std::string site) {
+    std::istringstream iss(site);
+    std::vector<std::string> tokens;
+    std::string token;
+    while (std::getline(iss, token, '.')) {
+        if (!token.empty())
+            tokens.push_back(token);
+    }
+    if (tokens.size() >= 2) {
+        std::stringstream str;
+        str << tokens.at(tokens.size() - 2);
+        return str.str();
+    }
+    return "";
 }
 
 int readConfigFile() {
@@ -31,8 +52,10 @@ int readConfigFile() {
         if (line.substr(0, 1) == "#") continue;
         if (std::getline(is_line, addressFrom, '=')) {
             std::string addressTo;
-            if (std::getline(is_line, addressTo))
-                spoofMap[addressFrom] = addressTo;
+            if (std::getline(is_line, addressTo)) {
+                std::string addressFromDomain = getDomain(addressFrom);
+                spoofMap[addressFromDomain] = addressTo;
+            }
         }
     }
     file.close();

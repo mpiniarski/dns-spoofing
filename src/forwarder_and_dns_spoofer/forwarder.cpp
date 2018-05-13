@@ -32,7 +32,7 @@ void forward_frame(const u_char *frame, size_t frame_size, char *interface_name,
     sall_send.sll_halen = ETH_ALEN;
     struct ethhdr *eth_hdr = (struct ethhdr *) frame;
 
-    printFromToInfo(eth_hdr);
+    // printFromToInfo(eth_hdr);        // TODO usunąć
 
     sscanf(default_gateway_mac, "%hhx:%hhx:%hhx:%hhx:%hhx:%hhx",
            &sall_send.sll_addr[0], &sall_send.sll_addr[1], &sall_send.sll_addr[2],

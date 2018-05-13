@@ -1,11 +1,10 @@
+#include <pcap.h>
+
 #include "forwarder_and_dns_spoofer.h"
 #include "../helper.h"
-
 #include "filter.h"
 #include "forwarder.h"
 #include "dns_spoofer.h"
-
-#include <pcap.h>
 
 char *g_interface_name;
 char *g_default_gateway_mac;
@@ -38,7 +37,7 @@ void forward_and_dns_spoof(char *interface_name, char *default_gateway_mac) {
 
 void trap(u_char *user, const struct pcap_pkthdr *h, const u_char *frame) {
     if (handle_dns_spoofing(frame, g_interface_name)) {
-        printf("DNS spoofing!\n");
+        printf("DNS spoofed!\n\n");
     } else {
         forward_frame(frame, h->caplen, g_interface_name, g_default_gateway_mac);
     }
