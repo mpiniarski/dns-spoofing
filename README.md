@@ -1,10 +1,6 @@
 # Building and running
 ### Compiling program
-Go to `src` directory and run:
-```commandLine
-gcc -Wall ./dnspoof.c -o dnspoof -lnet -pthread -lpcap
-```
-or use using `CMakeLists.txt` (under main project path):
+Using `CMakeLists.txt` (under main project path):
 ```commandLine
 cmake .
 make
@@ -12,8 +8,9 @@ make
 
 ### Running program
 ```commandLine
-sudo ./bin/dns_spoofing
+sudo ./bin/dnspoog INTERFACE DEFAULT_GATEWAY_IP DEFAULT_GATEWAY_MAC
 ```
+Note that this program requires root privileges.
 
 ### Configuration file usage
 Configuration file should appear in main project directory (next to executable file or one level higher than `dnspoof.cpp` file) 
@@ -38,7 +35,7 @@ www.other-attacked-site.com=www.spoof-site.pl
 
 * `src/dnspoof.cpp`
 
-Main file (with `main()` function) where two threads are called: first responsible for arp spoofing and second for dns spoofing.
+Main file (with `main()` function) where two threads are started: first responsible for arp spoofing and second for dns spoofing.
 
 * `src/helper.cpp`
 
@@ -60,7 +57,7 @@ Function `trap` is the one which is called every time filtered packet arrives. I
 
 * `src/forwarder_and_dns_spoofer/filter.cpp`
 
-It constains all functions responsible for packet filtering used in pcap initialization.
+It contains all functions responsible for packet filtering used in pcap initialization.
 
 * `src/forwarder_and_dns_spoofer/dns_spoofer.cpp`
 
@@ -68,6 +65,9 @@ It constains all functions responsible for packet filtering used in pcap initial
 
 `handle_dns_spoofing()` is a function called in `trap()`. It is responsible for sending dns response with fake address.
 
-`libnet_build_dns_spoof()` is used to create dns response.
+`libnet_build_dns_spoof()` is used to create fake dns response.
 
 * `src/forwarder_and_dns_spoofer/forwarder.cpp`
+
+It contains `forward_frame()` function, which sends given frame to default gateway.
+

@@ -16,8 +16,8 @@ void stop(int signal) {
     exit(EXIT_SUCCESS);
 }
 
-std::shared_ptr<std::map<std::string, std::string>> getSpoofMap() {
-    return std::make_shared<std::map<std::string, std::string>>(spoofMap);
+std::shared_ptr<std::map<std::string, char *>> getSpoofMap() {
+    return std::make_shared<std::map<std::string, char *>>(spoofMap);
 }
 
 std::string getDomain(std::string site) {
@@ -54,7 +54,13 @@ int readConfigFile() {
             std::string addressTo;
             if (std::getline(is_line, addressTo)) {
                 std::string addressFromDomain = getDomain(addressFrom);
-                spoofMap[addressFromDomain] = addressTo;
+
+                struct hostent *addrent = gethostbyname(addressTo.c_str());
+                if (addrent->h_length != 4) {
+                    printf("%s", "ERROR!");
+                }
+
+                spoofMap[addressFromDomain] = addrent->h_addr_list[0];
             }
         }
     }

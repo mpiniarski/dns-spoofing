@@ -1,6 +1,5 @@
 /*
  *                           DNS SPOOFER
- * Compilation:  gcc -Wall ./dnspoof.c -o dnspoof -lnet -lpthread
  * Usage:        ./dnspoog INTERFACE DEFAULT_GATEWAY_IP DEFAULT_GATEWAY_MAC
  * NOTE:         This program requires root privileges.
  *

