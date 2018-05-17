@@ -1,3 +1,10 @@
+# About *DNSpoofer*
+This program delivers an attack called "DNS spoofing" (and "ARP spoofing" consequently).
+When executing, it sends ARP messages on broadcast and pretends to be a gateway.
+
+DNS queries with addresses chosen to be spoofed (in `config.cfg`) are answered with fake ip reply.
+Other messages are forwarded to original (real) gateway.
+
 # Building and running
 ### Compiling program
 Using `CMakeLists.txt` (under main project path):
