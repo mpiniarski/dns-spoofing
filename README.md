@@ -12,6 +12,11 @@ sudo ./bin/dnspoog INTERFACE DEFAULT_GATEWAY_IP DEFAULT_GATEWAY_MAC
 ```
 Note that this program requires root privileges.
 
+### Testing
+```commandline
+dig -q www.wp.pl
+```
+
 ### Configuration file usage
 Configuration file should appear in main project directory (next to executable file or one level higher than `dnspoof.cpp` file) 
 under `config.cfg` name.
