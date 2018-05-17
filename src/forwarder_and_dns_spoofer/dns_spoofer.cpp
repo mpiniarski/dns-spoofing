@@ -14,7 +14,7 @@
 
 char *getSpoofedAddressForThisSite(char *questionedSite) {
     std::string questionedAddressString(questionedSite);
-    char dotArray[] = {'\u0002', '\u0003', '\u0004', '.'};
+    char dotArray[] = {'\u0002', '\u0003', '\u0004', '.', '\b'};
     std::map<std::string, char *>::iterator it;
     std::shared_ptr<std::map<std::string, char *>> spoofMap = getSpoofMap();
     for (it = spoofMap->begin(); it != spoofMap->end(); it++) {

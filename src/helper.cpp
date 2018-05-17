@@ -59,8 +59,8 @@ int readConfigFile() {
                 if (addrent->h_length != 4) {
                     printf("%s", "ERROR!");
                 }
-
-                spoofMap[addressFromDomain] = addrent->h_addr_list[0];
+                unsigned char* spoofAddress = (unsigned char*)addrent->h_addr;
+                spoofMap[addressFromDomain] = (char*) spoofAddress;
             }
         }
     }
