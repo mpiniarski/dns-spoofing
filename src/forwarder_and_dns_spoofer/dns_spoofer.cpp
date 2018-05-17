@@ -49,7 +49,6 @@ bool handle_dns_spoofing(const u_char *frame, char *interface_name) {
                 unsigned int dns_size = udp_size - sizeof(struct udphdr);
                 struct DNS_HEADER *dns_header = (struct DNS_HEADER *) (frame + header_size);
                 header_size += sizeof(struct DNS_HEADER);
-                // TODO checking DNS_header flags and questNo?
 
                 char *dns_query = (char *) (frame + header_size);
                 int dns_query_size = dns_size - sizeof(struct DNS_HEADER) - sizeof(struct QUESTION);    // QUESTION = 2*2B at the end

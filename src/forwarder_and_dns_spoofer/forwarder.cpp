@@ -13,7 +13,6 @@
 #include <libnet.h>
 
 void forward_frame(const u_char *frame, size_t frame_size, char *interface_name, char *default_gateway_mac) {
-    // TODO chyba nie trzeba tego socketu tworzyć, ustawiać i usuwać za każdym razem na nowo, to znacznie spowalania program... ale nie jestem pewien
     int sfd_send = socket(PF_PACKET, SOCK_RAW, htons(ETH_P_ALL));
 
     // Get interface name

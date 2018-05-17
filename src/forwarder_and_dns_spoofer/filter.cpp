@@ -30,7 +30,6 @@ std::string getIpAddress(std::string interface_name) {
         std::cerr << "Error occurs when searching for an ip!\n";
     }
     std::string ip = inet_ntoa(((struct sockaddr_in *) &interface_struct.ifr_addr)->sin_addr);
-    // TODO inet_ntoa wymaga zaciągnięcia tu całego libnet.h, może jakaś inna funkcja?
     close(fd);
     return ip;
 }

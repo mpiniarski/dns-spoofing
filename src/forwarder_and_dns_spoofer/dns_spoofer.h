@@ -10,7 +10,6 @@
 
 bool handle_dns_spoofing(const u_char *frame, char *interface_name);
 
-// TODO może tę i libnet_build_arp_spoof przenieść do jakiegoś wspólnego modułu i mieć moduł rozszerzający libneta?
 void libnet_build_dns_spoof(__be32 source_ip,
                             __be32 destination_ip,
                             uint16_t destination_udp_port,

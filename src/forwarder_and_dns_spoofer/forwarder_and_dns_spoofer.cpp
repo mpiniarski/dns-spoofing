@@ -18,7 +18,7 @@ void forward_and_dns_spoof(char *interface_name, char *default_gateway_mac) {
     // Init pcap
     static char *errbuf = (char *) (malloc(PCAP_ERRBUF_SIZE));                   // alloc memory for error buffer
     static pcap_t *handle = pcap_create(interface_name, errbuf);                 // alloc for handler
-    pcap_set_promisc(handle, 1); // TODO czy to musi być promisc mode?
+    pcap_set_promisc(handle, 1);
     pcap_set_snaplen(handle, 1500);                                             // frame length
     pcap_activate(handle);
 
