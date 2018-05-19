@@ -1,16 +1,15 @@
 #include "forwarder.h"
 #include "../helper.h"
 
-#include <linux/types.h>
-#include <sys/socket.h>
-#include <netinet/in.h>
-#include <linux/if_ether.h>
-#include <net/if.h>
-#include <cstring>
-#include <stropts.h>
-#include <bits/ioctls.h>
 #include <linux/if_packet.h>
+#include <linux/if_ether.h>
+#include <sys/socket.h>
+#include <sys/ioctl.h>
+#include <netinet/in.h>
 #include <libnet.h>
+
+#include <cstring>
+
 
 void forward_frame(const u_char *frame, size_t frame_size, char *interface_name, char *default_gateway_mac) {
     int sfd_send = socket(PF_PACKET, SOCK_RAW, htons(ETH_P_ALL));
