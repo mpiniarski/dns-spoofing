@@ -2,7 +2,9 @@
 
 #include <linux/types.h>
 #include <libnet.h>
+#include <stdlib.h>
 #include <iomanip>
+#include <sstream>
 
 
 #define PROTOCOL_UDP 0x11

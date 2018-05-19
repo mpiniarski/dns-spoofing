@@ -1,7 +1,6 @@
 #include "dns_spoofer.h"
 
 #include <linux/if_ether.h>
-#include <linux/if_arp.h>
 #include <linux/if_ether.h>
 #include <linux/ip.h>
 #include <linux/udp.h>
