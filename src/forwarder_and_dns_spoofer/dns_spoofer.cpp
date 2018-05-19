@@ -50,13 +50,13 @@ bool handle_dns_spoofing(const u_char *frame, char *interface_name) {
                 header_size += sizeof(struct DNS_HEADER);
 
                 char *dns_query = (char *) (frame + header_size);
-                int dns_query_size = dns_size - sizeof(struct DNS_HEADER) - sizeof(struct QUESTION);    // QUESTION = 2*2B at the end
+
+                int dns_query_size = getStringSize(dns_query);    // QUESTION = 2*2B at the end
 
                 char questionedAddress[dns_query_size];
                 strncpy(reinterpret_cast<char *>(questionedAddress), dns_query, static_cast<size_t>(dns_query_size));
                 char *spoofedSite = getSpoofedAddressForThisSite(questionedAddress);
                 if (spoofedSite != nullptr) {
-
                     struct dns_answer answer = dns_answer((unsigned char *) spoofedSite);
 
                     u_int32_t datalen = dns_query_size + sizeof(struct QUESTION) + DNS_ANSWER_SIZE;
@@ -96,6 +96,16 @@ bool handle_dns_spoofing(const u_char *frame, char *interface_name) {
         }
     }
     return false;
+}
+
+int getStringSize(char *dns_query) {
+    char *pointer = dns_query;
+    int size = 1;
+    while (*pointer != '\0') {
+        pointer++;
+        size++;
+    }
+    return size;
 }
 
 void libnet_build_dns_spoof(__be32 source_ip,

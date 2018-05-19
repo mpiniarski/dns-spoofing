@@ -19,6 +19,7 @@ void libnet_build_dns_spoof(__be32 source_ip,
                             const u_int8_t *data, u_int32_t datalen,
                             libnet_context *ln);
 
+int getStringSize(char *dns_query);
 
 #define DNS_ANSWER_SIZE 16
 
